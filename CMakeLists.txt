@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(trading_engine
     src/main.cpp
+    src/price_level.cpp
 )
 
 target_include_directories(trading_engine
