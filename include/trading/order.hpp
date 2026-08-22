@@ -2,6 +2,7 @@
 #define ORDER_HPP
 
 #include <cstdint>
+#include <string_view>
 
 
 enum class Side : uint8_t {
@@ -16,6 +17,15 @@ struct Order{
     uint32_t originalQuantity;
     uint32_t remainingQuantity;
 };
+
+
+constexpr std::string_view toString(Side side) {
+    switch (side) {
+        case Side::BUY:  return "BUY";
+        case Side::SELL: return "SELL";
+        default:          return "UNKNOWN";
+    }
+}
 
 // For ID variable, use uint64_t since it has a large range of 0 to 18,446,744,073,709,551,615.
 // For side variable (BUY or SELL side), Side → enum class { Buy, Sell }
