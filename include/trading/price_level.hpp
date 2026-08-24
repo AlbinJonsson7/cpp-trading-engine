@@ -15,6 +15,7 @@ class PriceLevel {
         void removeFrontOrder();
         void removeOrder(uint64_t orderID);
         Order& getFrontOrder();
+        const Order& getFrontOrder() const;
         bool isEmpty() const;
         int64_t getPrice() const;
     

@@ -3,6 +3,7 @@
 #include <string>
 #include "trading/order.hpp"
 #include "trading/price_level.hpp"
+#include "trading/order_book.hpp"
 
 using namespace std;
 
@@ -18,28 +19,55 @@ int main(){
     Order order2;
     order2.orderID = 2;
     order2.side = Side::BUY;
-    order2.price = 10000;
+    order2.price = 9900;
     order2.originalQuantity = 30;
     order2.remainingQuantity = 30;
 
     Order order3;
     order3.orderID = 3;
     order3.side = Side::BUY;
-    order3.price = 10000;
+    order3.price = 10100;
     order3.originalQuantity = 40;
     order3.remainingQuantity = 40;
 
-    PriceLevel priceLevel(10000);
-    priceLevel.addOrder(order1);
-    priceLevel.addOrder(order2);
-    priceLevel.addOrder(order3);
+    Order order4;
+    order4.orderID = 4;
+    order4.side = Side::SELL;
+    order4.price = 10300;
+    order4.originalQuantity = 15;
+    order4.remainingQuantity = 15;
 
-    cout << "Front Order ID: " << priceLevel.getFrontOrder().orderID;
-    priceLevel.removeFrontOrder();
-    cout << "\nFront Order ID after removal: " << priceLevel.getFrontOrder().orderID;
-    priceLevel.removeOrder(3);
-    cout << "\nFront Order ID after removal: " << priceLevel.getFrontOrder().orderID;
-    priceLevel.removeFrontOrder();
-    cout << "\nIs empty: " << priceLevel.isEmpty();
+    Order order5;
+    order5.orderID = 5;
+    order5.side = Side::SELL;
+    order5.price = 10200;
+    order5.originalQuantity = 25;
+    order5.remainingQuantity = 25;
+
+    Order order6;
+    order6.orderID = 6;
+    order6.side = Side::SELL;
+    order6.price = 10400;
+    order6.originalQuantity = 35;   
+    order6.remainingQuantity = 35;
+
+    OrderBook orderBook;
+    orderBook.addOrder(order1);
+    orderBook.addOrder(order2);
+    orderBook.addOrder(order3);
+    
+
+    auto bestBid = orderBook.getBestBid();
+    auto bestAsk = orderBook.getBestAsk();
+
+    if(bestBid){
+        cout << "Best Bid Price: " << *bestBid << endl;
+    }
+
+    if(bestAsk){
+        cout << "Best Ask Price: " << *bestAsk << endl;
+    }else{
+        cout << "No asks available." << endl;
+    }
 
 }

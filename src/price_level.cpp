@@ -1,6 +1,6 @@
 #include "trading/price_level.hpp"
 #include <iostream>
-
+#include <stdexcept>
 
 PriceLevel::PriceLevel(int64_t price) : price(price) {}
 
@@ -35,6 +35,15 @@ Order& PriceLevel::getFrontOrder(){
         throw std::runtime_error("PriceLevel is empty");
     }
 
+}
+
+const Order& PriceLevel::getFrontOrder() const {
+    if(!orders.empty()){
+        return orders.front();
+    }else{
+        std::cerr << "Error: Cannot retrieve order from an empty price level." << std::endl;
+        throw std::runtime_error("PriceLevel is empty");
+    }
 }
 
 
