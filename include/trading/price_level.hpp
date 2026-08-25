@@ -18,6 +18,7 @@ class PriceLevel {
         const Order& getFrontOrder() const;
         bool isEmpty() const;
         int64_t getPrice() const;
+        bool containsOrder(uint64_t orderID) const;
     
 
 };

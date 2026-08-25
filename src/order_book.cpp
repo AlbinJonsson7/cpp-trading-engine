@@ -147,3 +147,18 @@ bool OrderBook::cancelOrder(uint64_t orderID){
 }
 
 
+bool OrderBook::containsOrder(uint64_t orderID) const{
+    for(auto it = bids.begin();it != bids.end();++it){
+        if(it->second.containsOrder(orderID)){
+            return true;
+        }
+    }
+    for(auto it = asks.begin();it != asks.end();++it){
+        if(it->second.containsOrder(orderID)){
+            return true;
+        }
+    }
+    return false;
+}
+
+

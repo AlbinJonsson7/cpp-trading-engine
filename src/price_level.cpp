@@ -55,3 +55,13 @@ bool PriceLevel::isEmpty() const {
 int64_t PriceLevel::getPrice() const{
     return price;
 }
+
+
+bool PriceLevel::containsOrder(uint64_t orderID) const{
+    for(auto it = orders.begin(); it != orders.end();++it){
+        if(it->orderID == orderID){
+            return true;
+        }
+    }
+    return false;
+}

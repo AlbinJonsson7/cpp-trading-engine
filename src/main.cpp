@@ -13,163 +13,72 @@ using namespace std;
 int main(){
 
     // =====================================================
-    // TEST 1: MARKET BUY walks across multiple ask levels
-    //
-    // Asks:
-    // 10200 -> 10
-    // 10300 -> 15
-    // 10600 -> 20
-    //
-    // MARKET BUY 30
-    //
-    // Expected:
-    // 10 @ 10200
-    // 15 @ 10300
-    // 5  @ 10600
+    // TEST 1: Quantity exactly at the limit
+    // Expected: ACCEPTED
     // =====================================================
     {
-        cout << "\n--- Test 1: Market BUY Across Levels ---" << endl;
+        cout << "\n--- Test 1: Quantity At Limit ---" << endl;
 
         MatchingEngine engine;
 
-        Order sell1 {1, Side::SELL, 10200, 10, 10};
-        Order sell2 {2, Side::SELL, 10300, 15, 15};
-        Order sell3 {3, Side::SELL, 10600, 20, 20};
+        Order order;
+        order.orderID = 400;
+        order.side = Side::BUY;
+        order.price = 10000;
+        order.originalQuantity = 1000000;
+        order.remainingQuantity = 1000000;
+        order.orderType = OrderType::LIMIT;
 
-        engine.processOrder(sell1);
-        engine.processOrder(sell2);
-        engine.processOrder(sell3);
+        ProcessResult result = engine.processOrder(order);
 
-        Order marketBuy;
-        marketBuy.orderID = 50;
-        marketBuy.side = Side::BUY;
-        marketBuy.price = 0; // ignored for MARKET
-        marketBuy.originalQuantity = 30;
-        marketBuy.remainingQuantity = 30;
-        marketBuy.orderType = OrderType::MARKET;
+        cout << "Trades created: " << result.trades.size() << endl;
 
-        vector<Trade> trades = engine.processOrder(marketBuy);
-
-        cout << "Number of trades: " << trades.size() << endl;
-
-        for(const Trade& trade : trades){
-            cout << "Buy Order ID: " << trade.buyOrderID << endl;
-            cout << "Sell Order ID: " << trade.sellOrderID << endl;
-            cout << "Price: " << trade.price << endl;
-            cout << "Quantity: " << trade.quantity << endl;
-            cout << "-------------------" << endl;
+        if(result.status == ProcessStatus::ACCEPTED){
+            cout << "Status: ACCEPTED" << endl;
         }
     }
 
 
     // =====================================================
-    // TEST 2: MARKET BUY with insufficient liquidity
-    //
-    // Available:
-    // 10200 -> 10
-    // 10300 -> 15
-    //
-    // Total available = 25
-    // MARKET BUY = 40
-    //
-    // Expected:
-    // executes 25
-    // remaining 15 is cancelled
+    // TEST 2: Quantity above the limit
+    // Expected: REJECTED_QUANTITY_TOO_LARGE
     // =====================================================
     {
-        cout << "\n--- Test 2: Market BUY Insufficient Liquidity ---" << endl;
+        cout << "\n--- Test 2: Quantity Above Limit ---" << endl;
 
         MatchingEngine engine;
 
-        Order sell1 {10, Side::SELL, 10200, 10, 10};
-        Order sell2 {11, Side::SELL, 10300, 15, 15};
+        Order tooLarge;
+        tooLarge.orderID = 500;
+        tooLarge.side = Side::BUY;
+        tooLarge.price = 10000;
+        tooLarge.originalQuantity = 1000001;
+        tooLarge.remainingQuantity = 1000001;
+        tooLarge.orderType = OrderType::LIMIT;
 
-        engine.processOrder(sell1);
-        engine.processOrder(sell2);
+        ProcessResult result = engine.processOrder(tooLarge);
 
-        Order marketBuy;
-        marketBuy.orderID = 60;
-        marketBuy.side = Side::BUY;
-        marketBuy.price = 0;
-        marketBuy.originalQuantity = 40;
-        marketBuy.remainingQuantity = 40;
-        marketBuy.orderType = OrderType::MARKET;
+        cout << "Trades created: " << result.trades.size() << endl;
 
-        vector<Trade> trades = engine.processOrder(marketBuy);
-
-        cout << "Number of trades: " << trades.size() << endl;
-
-        for(const Trade& trade : trades){
-            cout << "Buy Order ID: " << trade.buyOrderID << endl;
-            cout << "Sell Order ID: " << trade.sellOrderID << endl;
-            cout << "Price: " << trade.price << endl;
-            cout << "Quantity: " << trade.quantity << endl;
-            cout << "-------------------" << endl;
+        if(result.status == ProcessStatus::REJECTED_QUANTITY_TOO_LARGE){
+            cout << "Status: REJECTED_QUANTITY_TOO_LARGE" << endl;
         }
 
-        // If the leftover 15 was correctly cancelled,
-        // this SELL should NOT find BUY #60 resting in the book.
-        Order testSell;
-        testSell.orderID = 61;
-        testSell.side = Side::SELL;
-        testSell.price = 1;
-        testSell.originalQuantity = 15;
-        testSell.remainingQuantity = 15;
 
-        vector<Trade> leftoverTest = engine.processOrder(testSell);
+        // This SELL would cross BUY #500 if it had incorrectly
+        // entered the order book.
+        Order sell;
+        sell.orderID = 501;
+        sell.side = Side::SELL;
+        sell.price = 9000;
+        sell.originalQuantity = 10;
+        sell.remainingQuantity = 10;
+        sell.orderType = OrderType::LIMIT;
 
-        cout << "Trades against cancelled remainder: "
-             << leftoverTest.size() << endl;
-    }
+        ProcessResult secondResult = engine.processOrder(sell);
 
-
-    // =====================================================
-    // TEST 3: MARKET SELL walks across bid levels
-    //
-    // Bids:
-    // 10100 -> 10
-    // 10000 -> 15
-    //  9800 -> 20
-    //
-    // MARKET SELL 30
-    //
-    // Expected:
-    // 10 @ 10100
-    // 15 @ 10000
-    // 5  @ 9800
-    // =====================================================
-    {
-        cout << "\n--- Test 3: Market SELL Across Levels ---" << endl;
-
-        MatchingEngine engine;
-
-        Order buy1 {20, Side::BUY, 10100, 10, 10};
-        Order buy2 {21, Side::BUY, 10000, 15, 15};
-        Order buy3 {22, Side::BUY, 9800, 20, 20};
-
-        engine.processOrder(buy1);
-        engine.processOrder(buy2);
-        engine.processOrder(buy3);
-
-        Order marketSell;
-        marketSell.orderID = 70;
-        marketSell.side = Side::SELL;
-        marketSell.price = 999999; // ignored for MARKET
-        marketSell.originalQuantity = 30;
-        marketSell.remainingQuantity = 30;
-        marketSell.orderType = OrderType::MARKET;
-
-        vector<Trade> trades = engine.processOrder(marketSell);
-
-        cout << "Number of trades: " << trades.size() << endl;
-
-        for(const Trade& trade : trades){
-            cout << "Buy Order ID: " << trade.buyOrderID << endl;
-            cout << "Sell Order ID: " << trade.sellOrderID << endl;
-            cout << "Price: " << trade.price << endl;
-            cout << "Quantity: " << trade.quantity << endl;
-            cout << "-------------------" << endl;
-        }
+        cout << "Trades against rejected order: "
+             << secondResult.trades.size() << endl;
     }
 
     return 0;
