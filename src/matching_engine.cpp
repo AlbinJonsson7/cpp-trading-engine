@@ -11,12 +11,13 @@ std::vector<Trade> MatchingEngine::processOrder(Order incomingOrder){
     if(incomingOrder.side == Side::BUY){
         while(incomingOrder.remainingQuantity > 0){
             if(!orderBook.hasAsks()){
+                if(incomingOrder.orderType == OrderType::MARKET) return currentVector;
                 orderBook.addOrder(incomingOrder);
                 return currentVector;
             }
             std::optional<int64_t> bestAskPrice = orderBook.getBestAsk();
 
-            if(incomingOrder.price < *bestAskPrice){
+            if(incomingOrder.price < *bestAskPrice && incomingOrder.orderType == OrderType::LIMIT){
                 orderBook.addOrder(incomingOrder);
                 return currentVector;
             }
@@ -40,13 +41,14 @@ std::vector<Trade> MatchingEngine::processOrder(Order incomingOrder){
     }else if (incomingOrder.side == Side::SELL){
         while(incomingOrder.remainingQuantity > 0){
             if(!orderBook.hasBids()){
+                if(incomingOrder.orderType == OrderType::MARKET) return currentVector;
                 orderBook.addOrder(incomingOrder);
                 return currentVector;
             }
 
             std::optional<int64_t> bestBidPrice = orderBook.getBestBid();
             
-            if(incomingOrder.price > *bestBidPrice){
+            if(incomingOrder.price > *bestBidPrice && incomingOrder.orderType == OrderType::LIMIT){
                 orderBook.addOrder(incomingOrder);
                 return currentVector;
             }
