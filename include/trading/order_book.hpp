@@ -25,6 +25,7 @@ class OrderBook {
         bool hasAsks() const;
         bool removePriceLevel(int64_t price, Side side);
         bool fillBestOrder(Side side, uint32_t quantity);
+        bool cancelOrder(uint64_t orderID);
 };
 
 

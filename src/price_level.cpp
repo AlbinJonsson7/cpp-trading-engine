@@ -17,14 +17,14 @@ void PriceLevel::removeFrontOrder(){
     }
 }
 
-void PriceLevel::removeOrder(uint64_t orderID){
+bool PriceLevel::removeOrder(uint64_t orderID){
     for(auto it = orders.begin(); it != orders.end(); ++it){
         if(it->orderID == orderID){
             orders.erase(it);
-            return;
+            return true;
         }
     }
-    std::cerr << "Error: Order with ID " << orderID << " not found in this price level." << std::endl;
+    return false;
 }
 
 Order& PriceLevel::getFrontOrder(){

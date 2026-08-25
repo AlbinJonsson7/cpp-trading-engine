@@ -124,4 +124,26 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
 }
 
 
+bool OrderBook::cancelOrder(uint64_t orderID){
+    for(auto it = bids.begin(); it != bids.end(); ++it){
+        if(it->second.removeOrder(orderID)){
+            if(it->second.isEmpty()){
+                bids.erase(it);
+            }
+            return true;
+        }
+    }
+
+    for(auto it = asks.begin(); it != asks.end();++it){
+        if(it->second.removeOrder(orderID)){
+            if(it->second.isEmpty()){
+                asks.erase(it);
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
 

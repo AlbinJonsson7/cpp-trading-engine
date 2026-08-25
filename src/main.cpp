@@ -9,57 +9,111 @@
 
 using namespace std;
 
+
 int main(){
 
-    MatchingEngine engine;
+    // =====================================================
+    // TEST 1: Cancel an order from the middle of a PriceLevel
+    //
+    // FIFO before cancellation:
+    // #1 -> #2 -> #3
+    //
+    // Cancel #2
+    //
+    // Expected:
+    // #1 -> #3
+    // =====================================================
+    {
+        cout << "\n--- Test 1: Cancel Middle Order ---" << endl;
 
-    // Resting BUY #1: 20 @ 10100
-    Order buy1;
-    buy1.orderID = 1;
-    buy1.side = Side::BUY;
-    buy1.price = 10100;
-    buy1.originalQuantity = 20;
-    buy1.remainingQuantity = 20;
+        OrderBook book;
 
-    // Resting BUY #2: 25 @ 10000
-    Order buy2;
-    buy2.orderID = 2;
-    buy2.side = Side::BUY;
-    buy2.price = 10000;
-    buy2.originalQuantity = 25;
-    buy2.remainingQuantity = 25;
+        Order order1 {1, Side::BUY, 10000, 10, 10};
+        Order order2 {2, Side::BUY, 10000, 20, 20};
+        Order order3 {3, Side::BUY, 10000, 30, 30};
 
-    // Resting BUY #3: 30 @ 9900
-    Order buy3;
-    buy3.orderID = 3;
-    buy3.side = Side::BUY;
-    buy3.price = 9900;
-    buy3.originalQuantity = 30;
-    buy3.remainingQuantity = 30;
+        book.addOrder(order1);
+        book.addOrder(order2);
+        book.addOrder(order3);
 
-    // These should enter the book because there are no SELL orders yet
-    engine.processOrder(buy1);
-    engine.processOrder(buy2);
-    engine.processOrder(buy3);
+        bool cancelled = book.cancelOrder(2);
 
-    // Incoming SELL #8: 35 @ 10000
-    Order incomingSell;
-    incomingSell.orderID = 8;
-    incomingSell.side = Side::SELL;
-    incomingSell.price = 10000;
-    incomingSell.originalQuantity = 35;
-    incomingSell.remainingQuantity = 35;
+        cout << "Cancel Order #2: "
+             << (cancelled ? "success" : "failed") << endl;
 
-    vector<Trade> trades = engine.processOrder(incomingSell);
+        // #1 should still be first
+        auto firstOrder = book.getBestBidOrder();
 
-    cout << "Number of trades: " << trades.size() << endl;
+        if(firstOrder){
+            cout << "Front Order after cancellation: #"
+                 << firstOrder->orderID << endl;
+        }
 
-    for(const Trade& trade : trades){
-        cout << "Buy Order ID: " << trade.buyOrderID << endl;
-        cout << "Sell Order ID: " << trade.sellOrderID << endl;
-        cout << "Price: " << trade.price << endl;
-        cout << "Quantity: " << trade.quantity << endl;
-        cout << "-------------------" << endl;
+        // Remove #1 completely.
+        // If #2 was really cancelled, #3 should now be first.
+        book.fillBestOrder(Side::BUY, 10);
+
+        auto nextOrder = book.getBestBidOrder();
+
+        if(nextOrder){
+            cout << "Next Order: #"
+                 << nextOrder->orderID << endl;
+        }
+    }
+
+
+    // =====================================================
+    // TEST 2: Cancel the only order at a price
+    //
+    // Expected:
+    // Order removed
+    // PriceLevel removed
+    // No best ask remains
+    // =====================================================
+    {
+        cout << "\n--- Test 2: Remove Entire Price Level ---" << endl;
+
+        OrderBook book;
+
+        Order order {10, Side::SELL, 10200, 25, 25};
+
+        book.addOrder(order);
+
+        bool cancelled = book.cancelOrder(10);
+
+        cout << "Cancel Order #10: "
+             << (cancelled ? "success" : "failed") << endl;
+
+        auto bestAsk = book.getBestAsk();
+
+        if(!bestAsk){
+            cout << "Ask PriceLevel removed successfully." << endl;
+        }else{
+            cout << "ERROR: Ask still exists at "
+                 << *bestAsk << endl;
+        }
+    }
+
+
+    // =====================================================
+    // TEST 3: Cancel an order that doesn't exist
+    //
+    // Expected:
+    // cancelOrder() returns false
+    // =====================================================
+    {
+        cout << "\n--- Test 3: Nonexistent Order ---" << endl;
+
+        OrderBook book;
+
+        Order order {20, Side::BUY, 9900, 15, 15};
+
+        book.addOrder(order);
+
+        bool cancelled = book.cancelOrder(999);
+
+        cout << "Cancel Order #999: "
+             << (cancelled ? "success" : "not found") << endl;
     }
 
     return 0;
