@@ -1,73 +1,66 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include "trading/trade.hpp"
 #include "trading/order.hpp"
 #include "trading/price_level.hpp"
 #include "trading/order_book.hpp"
+#include "trading/matching_engine.hpp"
 
 using namespace std;
 
 int main(){
 
-    Order order1;
-    order1.orderID = 1;
-    order1.side = Side::BUY;
-    order1.price = 10000;
-    order1.originalQuantity = 20;
-    order1.remainingQuantity = 20;
+    MatchingEngine engine;
 
-    Order order2;
-    order2.orderID = 2;
-    order2.side = Side::BUY;
-    order2.price = 9900;
-    order2.originalQuantity = 30;
-    order2.remainingQuantity = 30;
+    // Resting BUY #1: 20 @ 10100
+    Order buy1;
+    buy1.orderID = 1;
+    buy1.side = Side::BUY;
+    buy1.price = 10100;
+    buy1.originalQuantity = 20;
+    buy1.remainingQuantity = 20;
 
-    Order order3;
-    order3.orderID = 3;
-    order3.side = Side::BUY;
-    order3.price = 10100;
-    order3.originalQuantity = 40;
-    order3.remainingQuantity = 40;
+    // Resting BUY #2: 25 @ 10000
+    Order buy2;
+    buy2.orderID = 2;
+    buy2.side = Side::BUY;
+    buy2.price = 10000;
+    buy2.originalQuantity = 25;
+    buy2.remainingQuantity = 25;
 
-    Order order4;
-    order4.orderID = 4;
-    order4.side = Side::SELL;
-    order4.price = 10300;
-    order4.originalQuantity = 15;
-    order4.remainingQuantity = 15;
+    // Resting BUY #3: 30 @ 9900
+    Order buy3;
+    buy3.orderID = 3;
+    buy3.side = Side::BUY;
+    buy3.price = 9900;
+    buy3.originalQuantity = 30;
+    buy3.remainingQuantity = 30;
 
-    Order order5;
-    order5.orderID = 5;
-    order5.side = Side::SELL;
-    order5.price = 10200;
-    order5.originalQuantity = 25;
-    order5.remainingQuantity = 25;
+    // These should enter the book because there are no SELL orders yet
+    engine.processOrder(buy1);
+    engine.processOrder(buy2);
+    engine.processOrder(buy3);
 
-    Order order6;
-    order6.orderID = 6;
-    order6.side = Side::SELL;
-    order6.price = 10400;
-    order6.originalQuantity = 35;   
-    order6.remainingQuantity = 35;
+    // Incoming SELL #8: 35 @ 10000
+    Order incomingSell;
+    incomingSell.orderID = 8;
+    incomingSell.side = Side::SELL;
+    incomingSell.price = 10000;
+    incomingSell.originalQuantity = 35;
+    incomingSell.remainingQuantity = 35;
 
-    OrderBook orderBook;
-    orderBook.addOrder(order1);
-    orderBook.addOrder(order2);
-    orderBook.addOrder(order3);
-    
+    vector<Trade> trades = engine.processOrder(incomingSell);
 
-    auto bestBid = orderBook.getBestBid();
-    auto bestAsk = orderBook.getBestAsk();
+    cout << "Number of trades: " << trades.size() << endl;
 
-    if(bestBid){
-        cout << "Best Bid Price: " << *bestBid << endl;
+    for(const Trade& trade : trades){
+        cout << "Buy Order ID: " << trade.buyOrderID << endl;
+        cout << "Sell Order ID: " << trade.sellOrderID << endl;
+        cout << "Price: " << trade.price << endl;
+        cout << "Quantity: " << trade.quantity << endl;
+        cout << "-------------------" << endl;
     }
 
-    if(bestAsk){
-        cout << "Best Ask Price: " << *bestAsk << endl;
-    }else{
-        cout << "No asks available." << endl;
-    }
-
+    return 0;
 }
