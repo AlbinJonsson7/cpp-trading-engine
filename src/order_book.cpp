@@ -3,23 +3,28 @@
 
 
 void OrderBook::addOrder(const Order& order){
+    OrderLocation data = {order.side,order.price};
     if(order.side == Side::BUY){
         auto it = bids.find(order.price);
         if(it != bids.end()){
-            it->second.addOrder(order);
+            data.orderIterator = it->second.addOrder(order);
+            orderLocations.emplace(order.orderID,data);
         }else{
             PriceLevel newPriceLevel(order.price);
-            newPriceLevel.addOrder(order);
-            bids.emplace(order.price, newPriceLevel);
+            auto addedLevel = bids.emplace(order.price, newPriceLevel);
+            data.orderIterator = addedLevel.first->second.addOrder(order);
+            orderLocations.emplace(order.orderID,data);
         }
     }else if(order.side == Side::SELL){
         auto it = asks.find(order.price);
         if(it != asks.end()){
-            it->second.addOrder(order);
+            data.orderIterator = it->second.addOrder(order);
+            orderLocations.emplace(order.orderID,data);
         }else{
             PriceLevel newPriceLevel(order.price);
-            newPriceLevel.addOrder(order);
-            asks.emplace(order.price, newPriceLevel);
+            auto addedLevel = asks.emplace(order.price, newPriceLevel);
+            data.orderIterator = addedLevel.first->second.addOrder(order);
+            orderLocations.emplace(order.orderID,data);
         }
     }else{
         std::cerr << "Error: Invalid order side." << std::endl;
@@ -98,7 +103,8 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
         if(quantity > order.remainingQuantity)return false;
         order.remainingQuantity = order.remainingQuantity - quantity;
         if(order.remainingQuantity == 0){
-            it->second.removeFrontOrder();  
+            orderLocations.erase(order.orderID); 
+            it->second.removeFrontOrder(); 
         }
         if(it->second.isEmpty()){
             removePriceLevel(it->first,Side::SELL);
@@ -113,7 +119,8 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
         if(quantity > order.remainingQuantity) return false;
         order.remainingQuantity = order.remainingQuantity - quantity;
         if(order.remainingQuantity == 0){
-            it->second.removeFrontOrder();
+            orderLocations.erase(order.orderID); 
+            it->second.removeFrontOrder(); 
         }
         if(it->second.isEmpty()){
             removePriceLevel(it->first, Side::BUY);
@@ -125,38 +132,44 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
 
 
 bool OrderBook::cancelOrder(uint64_t orderID){
-    for(auto it = bids.begin(); it != bids.end(); ++it){
-        if(it->second.removeOrder(orderID)){
-            if(it->second.isEmpty()){
-                bids.erase(it);
+
+    auto orderData = orderLocations.find(orderID);
+    if(orderData == orderLocations.end()){
+        return false;
+    }
+
+    if(orderData->second.side == Side::BUY){
+        auto bid = bids.find(orderData->second.price);
+        if(bid == bids.end()){
+            return false;
+        }
+        if(bid->second.removeOrder(orderData->second.orderIterator)){
+            orderLocations.erase(orderID);
+            if(bid->second.isEmpty()){
+                bids.erase(bid);
+            }
+            return true;
+        }
+    }else if(orderData->second.side == Side::SELL){
+        auto ask = asks.find(orderData->second.price);
+        if(ask == asks.end()){
+            return false;
+        }
+        if(ask->second.removeOrder(orderData->second.orderIterator)){
+            orderLocations.erase(orderID);
+            if(ask->second.isEmpty()){
+                asks.erase(ask);
             }
             return true;
         }
     }
-
-    for(auto it = asks.begin(); it != asks.end();++it){
-        if(it->second.removeOrder(orderID)){
-            if(it->second.isEmpty()){
-                asks.erase(it);
-            }
-            return true;
-        }
-    }
-
     return false;
 }
 
 
 bool OrderBook::containsOrder(uint64_t orderID) const{
-    for(auto it = bids.begin();it != bids.end();++it){
-        if(it->second.containsOrder(orderID)){
-            return true;
-        }
-    }
-    for(auto it = asks.begin();it != asks.end();++it){
-        if(it->second.containsOrder(orderID)){
-            return true;
-        }
+    if(orderLocations.find(orderID) != orderLocations.end()){
+        return true;
     }
     return false;
 }

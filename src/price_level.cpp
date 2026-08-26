@@ -1,12 +1,14 @@
 #include "trading/price_level.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <iterator>
 
 PriceLevel::PriceLevel(int64_t price) : price(price) {}
 
 
-void PriceLevel::addOrder(const Order& order) {
+std::list<Order>::iterator PriceLevel::addOrder(const Order& order) {
     orders.push_back(order);
+    return std::prev(orders.end());
 }
 
 void PriceLevel::removeFrontOrder(){
@@ -17,15 +19,15 @@ void PriceLevel::removeFrontOrder(){
     }
 }
 
-bool PriceLevel::removeOrder(uint64_t orderID){
-    for(auto it = orders.begin(); it != orders.end(); ++it){
-        if(it->orderID == orderID){
-            orders.erase(it);
-            return true;
-        }
+
+bool PriceLevel::removeOrder(std::list<Order>::iterator orderIterator){
+    if(orderIterator != orders.end()){
+        orders.erase(orderIterator);
+    return true;
     }
     return false;
 }
+
 
 Order& PriceLevel::getFrontOrder(){
     if(!orders.empty()){
@@ -56,12 +58,3 @@ int64_t PriceLevel::getPrice() const{
     return price;
 }
 
-
-bool PriceLevel::containsOrder(uint64_t orderID) const{
-    for(auto it = orders.begin(); it != orders.end();++it){
-        if(it->orderID == orderID){
-            return true;
-        }
-    }
-    return false;
-}

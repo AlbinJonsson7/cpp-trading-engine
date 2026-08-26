@@ -3,10 +3,18 @@
 
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <functional>
 #include <optional>
 #include "price_level.hpp"
 #include "order.hpp"
+
+
+struct OrderLocation{
+    Side side;
+    int64_t price;
+    std::list<Order>::iterator orderIterator;
+};
 
 
 
@@ -14,6 +22,7 @@ class OrderBook {
     private:
         std::map<int64_t, PriceLevel, std::greater<int64_t>> bids;
         std::map<int64_t, PriceLevel, std::less<int64_t>> asks;
+        std::unordered_map<uint64_t, OrderLocation> orderLocations;
 
     public:
         void addOrder(const Order& order);

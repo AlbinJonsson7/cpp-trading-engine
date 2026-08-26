@@ -11,32 +11,13 @@ class PriceLevel {
         std::list<Order> orders;
     public:
         PriceLevel(int64_t price);
-        void addOrder(const Order& order);
+        std::list<Order>::iterator addOrder(const Order& order);
         void removeFrontOrder();
-        bool removeOrder(uint64_t orderID);
+        bool removeOrder(std::list<Order>::iterator orderIterator);
         Order& getFrontOrder();
         const Order& getFrontOrder() const;
         bool isEmpty() const;
         int64_t getPrice() const;
-        bool containsOrder(uint64_t orderID) const;
-    
-
 };
-
-
-/*
-PriceLevel
-    Private:
-        Price → int64_t
-        Orders → std::list<Order>
-    
-    public:
-        addOrder(...)
-        removeOrder(...)
-        getFrontOrder(...)
-        isEmpty(...)
-        getPrice(...)
-*/
-
 
 #endif // PRICE_LEVEL_HPP
