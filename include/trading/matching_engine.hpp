@@ -14,6 +14,7 @@ class MatchingEngine{
 
     public:
         ProcessResult processOrder(Order incomingOrder);
+        bool cancelOrder(uint64_t orderID);
 
 };
 

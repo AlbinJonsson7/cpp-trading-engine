@@ -84,8 +84,10 @@ ProcessResult MatchingEngine::processOrder(Order incomingOrder){
             incomingOrder.remainingQuantity -= tradeQuantity;
         }
     }
-    
-
     return tradeResult;
+}
 
+
+bool MatchingEngine::cancelOrder(uint64_t orderID){
+    return orderBook.cancelOrder(orderID);
 }

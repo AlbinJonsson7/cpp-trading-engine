@@ -14,6 +14,7 @@ add_executable(trading_engine
     src/price_level.cpp
     src/order_book.cpp
     src/matching_engine.cpp
+    src/trading_server.cpp
 )
 
 target_include_directories(trading_engine
