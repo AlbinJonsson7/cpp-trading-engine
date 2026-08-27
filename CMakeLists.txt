@@ -15,6 +15,7 @@ add_executable(trading_engine
     src/order_book.cpp
     src/matching_engine.cpp
     src/trading_server.cpp
+    src/protocol.cpp
 )
 
 target_include_directories(trading_engine

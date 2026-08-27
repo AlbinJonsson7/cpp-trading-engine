@@ -1,11 +1,12 @@
 #ifndef PROCESS_RESULT_HPP
 #define PROCESS_RESULT_HPP
 
+#include <cstdint>
 #include <vector>
 #include "trade.hpp"
 
 
-enum class ProcessStatus{
+enum class ProcessStatus : uint8_t{
     ACCEPTED,
     REJECTED_DUPLICATE_ID,
     REJECTED_ZERO_QUANTITY,
