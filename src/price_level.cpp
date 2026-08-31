@@ -3,10 +3,10 @@
 #include <stdexcept>
 #include <iterator>
 
-PriceLevel::PriceLevel(int64_t price) : price(price) {}
+PriceLevel::PriceLevel(int64_t price, std::pmr::memory_resource* pool) : price(price), orders(pool) {}
 
 
-std::list<Order>::iterator PriceLevel::addOrder(const Order& order) {
+std::pmr::list<Order>::iterator PriceLevel::addOrder(const Order& order) {
     orders.push_back(order);
     return std::prev(orders.end());
 }
@@ -20,7 +20,7 @@ void PriceLevel::removeFrontOrder(){
 }
 
 
-bool PriceLevel::removeOrder(std::list<Order>::iterator orderIterator){
+bool PriceLevel::removeOrder(std::pmr::list<Order>::iterator orderIterator){
     if(orderIterator != orders.end()){
         orders.erase(orderIterator);
     return true;

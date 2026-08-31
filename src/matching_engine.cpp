@@ -3,8 +3,10 @@
 #include "trading/matching_engine.hpp"
 
 
+MatchingEngine::MatchingEngine(std::size_t expectedOrders):orderBook(expectedOrders){}
 
-ProcessResult MatchingEngine::processOrder(Order incomingOrder){
+
+ProcessResult MatchingEngine::processOrder(const Order& incomingOrder){
 
     if (orderBook.containsOrder(incomingOrder.orderID)){
         return {ProcessStatus::REJECTED_DUPLICATE_ID,{}};
@@ -16,72 +18,84 @@ ProcessResult MatchingEngine::processOrder(Order incomingOrder){
         return {ProcessStatus::REJECTED_INVALID_PRICE,{}};
     }
     ProcessResult tradeResult = {.status = ProcessStatus::ACCEPTED,.trades = {}};
+    auto remainingQuantity = incomingOrder.remainingQuantity;
 
     if(incomingOrder.side == Side::BUY){
-        while(incomingOrder.remainingQuantity > 0){
-            if(!orderBook.hasAsks()){
+        while(remainingQuantity > 0){
+            auto bestAskOrder = orderBook.getBestAskOrder();
+
+            if(bestAskOrder == nullptr){
                 if(incomingOrder.orderType == OrderType::MARKET){
                     return tradeResult;
                 }
-                orderBook.addOrder(incomingOrder);
+                if(remainingQuantity == incomingOrder.remainingQuantity){
+                    orderBook.addOrder(incomingOrder);
+                    return tradeResult;
+                }
+                Order localOrder = incomingOrder;
+                localOrder.remainingQuantity = remainingQuantity;
+                orderBook.addOrder(localOrder);
                 return tradeResult;
             }
-            std::optional<int64_t> bestAskPrice = orderBook.getBestAsk();
-
-            if(incomingOrder.price < *bestAskPrice && incomingOrder.orderType == OrderType::LIMIT){
-                orderBook.addOrder(incomingOrder);
+            
+            if(incomingOrder.price < bestAskOrder->price && incomingOrder.orderType == OrderType::LIMIT){
+                if(remainingQuantity == incomingOrder.remainingQuantity){
+                    orderBook.addOrder(incomingOrder);
+                    return tradeResult;
+                }
+                Order localOrder = incomingOrder;
+                localOrder.remainingQuantity = remainingQuantity;
+                orderBook.addOrder(localOrder);
                 return tradeResult;
             }
 
-            std::optional<Order> bestAskOrderOptional = orderBook.getBestAskOrder();
+            uint32_t tradeQuantity = std::min(remainingQuantity,bestAskOrder->remainingQuantity);
 
-            if (!bestAskOrderOptional) {
-                return tradeResult;
-            }
-            Order bestAskOrder = *bestAskOrderOptional;
-
-            uint32_t tradeQuantity = std::min(incomingOrder.remainingQuantity,bestAskOrder.remainingQuantity);
-
-            Trade trade = {.buyOrderID = incomingOrder.orderID, .sellOrderID = bestAskOrder.orderID, .price = bestAskOrder.price, .quantity = tradeQuantity};
+            Trade trade = {.buyOrderID = incomingOrder.orderID, .sellOrderID = bestAskOrder->orderID, .price = bestAskOrder->price, .quantity = tradeQuantity};
             tradeResult.trades.push_back(trade);
 
             orderBook.fillBestOrder(Side::SELL,tradeQuantity);
 
-            incomingOrder.remainingQuantity -= tradeQuantity;
+            remainingQuantity -= tradeQuantity;
         }
     }else if (incomingOrder.side == Side::SELL){
-        while(incomingOrder.remainingQuantity > 0){
-            if(!orderBook.hasBids()){
+        while(remainingQuantity > 0){
+            auto bestBidOrder = orderBook.getBestBidOrder();
+            
+
+            if(bestBidOrder == nullptr){
                 if(incomingOrder.orderType == OrderType::MARKET){
                     return tradeResult;
                 }
-                orderBook.addOrder(incomingOrder);
+                if(remainingQuantity == incomingOrder.remainingQuantity){
+                    orderBook.addOrder(incomingOrder);
+                    return tradeResult;
+                }
+                Order localOrder = incomingOrder;
+                localOrder.remainingQuantity = remainingQuantity;
+                orderBook.addOrder(localOrder);
                 return tradeResult;
             }
 
-            std::optional<int64_t> bestBidPrice = orderBook.getBestBid();
-            
-            if(incomingOrder.price > *bestBidPrice && incomingOrder.orderType == OrderType::LIMIT){
-                orderBook.addOrder(incomingOrder);
+            if(incomingOrder.price > bestBidOrder->price && incomingOrder.orderType == OrderType::LIMIT){
+                if(remainingQuantity == incomingOrder.remainingQuantity){
+                    orderBook.addOrder(incomingOrder);
+                    return tradeResult;
+                }
+                Order localOrder = incomingOrder;
+                localOrder.remainingQuantity = remainingQuantity;
+                orderBook.addOrder(localOrder);
                 return tradeResult;
             }
 
-            std::optional<Order> bestBidOrderOptional = orderBook.getBestBidOrder();
+            uint32_t tradeQuantity = std::min(remainingQuantity,bestBidOrder->remainingQuantity);
 
-            if (!bestBidOrderOptional) {
-                return tradeResult;
-            }
-
-            Order bestBidOrder = *bestBidOrderOptional;
-
-            uint32_t tradeQuantity = std::min(incomingOrder.remainingQuantity,bestBidOrder.remainingQuantity);
-
-            Trade trade = {.buyOrderID = bestBidOrder.orderID, .sellOrderID = incomingOrder.orderID, .price = bestBidOrder.price, .quantity = tradeQuantity};
+            Trade trade = {.buyOrderID = bestBidOrder->orderID, .sellOrderID = incomingOrder.orderID, .price = bestBidOrder->price, .quantity = tradeQuantity};
             tradeResult.trades.push_back(trade);
 
             orderBook.fillBestOrder(Side::BUY, tradeQuantity);
 
-            incomingOrder.remainingQuantity -= tradeQuantity;
+            remainingQuantity -= tradeQuantity;
         }
     }
     return tradeResult;

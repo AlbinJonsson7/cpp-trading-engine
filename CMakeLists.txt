@@ -16,9 +16,22 @@ add_executable(trading_engine
     src/matching_engine.cpp
     src/trading_server.cpp
     src/protocol.cpp
+    
 )
 
 target_include_directories(trading_engine
+    PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+add_executable(matching_engine_benchmark
+    benchmarks/matching_engine_benchmark.cpp
+    src/price_level.cpp
+    src/order_book.cpp
+    src/matching_engine.cpp
+)
+
+target_include_directories(matching_engine_benchmark
     PRIVATE
     ${PROJECT_SOURCE_DIR}/include
 )

@@ -2,34 +2,28 @@
 #include "trading/order_book.hpp"
 
 
+OrderBook::OrderBook(std::size_t expectedOrders):orderLocations(&pool){
+    orderLocations.reserve(expectedOrders);
+}
+
+
 void OrderBook::addOrder(const Order& order){
     OrderLocation data = {order.side,order.price};
     if(order.side == Side::BUY){
-        auto it = bids.find(order.price);
-        if(it != bids.end()){
-            data.orderIterator = it->second.addOrder(order);
-            orderLocations.emplace(order.orderID,data);
-        }else{
-            PriceLevel newPriceLevel(order.price);
-            auto addedLevel = bids.emplace(order.price, newPriceLevel);
-            data.orderIterator = addedLevel.first->second.addOrder(order);
-            orderLocations.emplace(order.orderID,data);
-        }
+        auto it = bids.try_emplace(order.price,order.price,&pool);
+        data.orderIterator = it.first->second.addOrder(order);
+        data.priceLevel = &it.first->second;
+        orderLocations.emplace(order.orderID,data);
+
     }else if(order.side == Side::SELL){
-        auto it = asks.find(order.price);
-        if(it != asks.end()){
-            data.orderIterator = it->second.addOrder(order);
-            orderLocations.emplace(order.orderID,data);
-        }else{
-            PriceLevel newPriceLevel(order.price);
-            auto addedLevel = asks.emplace(order.price, newPriceLevel);
-            data.orderIterator = addedLevel.first->second.addOrder(order);
-            orderLocations.emplace(order.orderID,data);
-        }
+        auto it = asks.try_emplace(order.price,order.price,&pool);
+        data.orderIterator = it.first->second.addOrder(order);
+        data.priceLevel = &it.first->second;
+        orderLocations.emplace(order.orderID,data);
+        
     }else{
         std::cerr << "Error: Invalid order side." << std::endl;
     }
-
 }
 
 
@@ -49,19 +43,19 @@ std::optional<int64_t> OrderBook::getBestAsk() const{
 }
 
 
-std::optional<Order> OrderBook::getBestBidOrder() const{
+const Order* OrderBook::getBestBidOrder() const{
     if(bids.empty()){
-        return std::nullopt;
+        return nullptr;
     }
-    return std::make_optional(bids.begin()->second.getFrontOrder());
+    return &bids.begin()->second.getFrontOrder();
 }
 
 
-std::optional<Order> OrderBook::getBestAskOrder() const{
+const Order* OrderBook::getBestAskOrder() const{
     if(asks.empty()){
-        return std::nullopt;
+        return nullptr;
     }
-    return std::make_optional(asks.begin()->second.getFrontOrder());
+    return &asks.begin()->second.getFrontOrder();
 }
 
 
@@ -107,7 +101,7 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
             it->second.removeFrontOrder(); 
         }
         if(it->second.isEmpty()){
-            removePriceLevel(it->first,Side::SELL);
+            asks.erase(it);
         }
         return true;
     }else if (side == Side::BUY){
@@ -123,7 +117,7 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
             it->second.removeFrontOrder(); 
         }
         if(it->second.isEmpty()){
-            removePriceLevel(it->first, Side::BUY);
+            bids.erase(it);
         }
         return true;
     }
@@ -138,30 +132,15 @@ bool OrderBook::cancelOrder(uint64_t orderID){
         return false;
     }
 
-    if(orderData->second.side == Side::BUY){
-        auto bid = bids.find(orderData->second.price);
-        if(bid == bids.end()){
-            return false;
+    auto priceLevel = orderData->second.priceLevel;
+    auto price = orderData->second.price;
+    auto side = orderData->second.side;
+    if(priceLevel->removeOrder(orderData->second.orderIterator)){
+        orderLocations.erase(orderData);
+        if(priceLevel->isEmpty()){
+            removePriceLevel(price,side);
         }
-        if(bid->second.removeOrder(orderData->second.orderIterator)){
-            orderLocations.erase(orderID);
-            if(bid->second.isEmpty()){
-                bids.erase(bid);
-            }
-            return true;
-        }
-    }else if(orderData->second.side == Side::SELL){
-        auto ask = asks.find(orderData->second.price);
-        if(ask == asks.end()){
-            return false;
-        }
-        if(ask->second.removeOrder(orderData->second.orderIterator)){
-            orderLocations.erase(orderID);
-            if(ask->second.isEmpty()){
-                asks.erase(ask);
-            }
-            return true;
-        }
+        return true;
     }
     return false;
 }

@@ -191,6 +191,20 @@ ProcessResult deserializeProcessResult(const std::vector<uint8_t>& data){
 }
 
 
+std::array<uint8_t,CANCEL_ORDER_RESPONSE_SIZE> serializeCancellationResponse(bool cancelSuccess){
+    std::array<uint8_t, CANCEL_ORDER_RESPONSE_SIZE> serializeArray{};
+
+    serializeArray[0] = static_cast<uint8_t>(RequestType::CANCEL_ORDER);
+    serializeArray[1] = static_cast<uint8_t>(cancelSuccess);
+
+    return serializeArray;
+}
+
+
+bool deserializeCancellationResponse(const std::array<uint8_t,CANCEL_ORDER_RESPONSE_SIZE>& data){
+    return data[1] != 0;
+}
+
 /*
 Trades: 
 
