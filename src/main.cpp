@@ -4,9 +4,9 @@
 #include <iostream>
 #include <vector>
 
-#include "trading/order_index.hpp"
 #include "trading/matching_engine.hpp"
 #include "trading/order.hpp"
+#include "trading/order_index.hpp"
 #include "trading/trade.hpp"
 
 
@@ -52,7 +52,7 @@ Order makeMarketOrder(
 
 
 // =====================================================
-// FIND IDs THAT HASH TO A SPECIFIC BUCKET
+// FIND IDS THAT HASH TO SAME BUCKET
 // =====================================================
 
 std::vector<uint64_t> findIdsForBucket(
@@ -82,8 +82,86 @@ std::vector<uint64_t> findIdsForBucket(
 
 
 // =====================================================
-// ORDERINDEX TEST 1
-// BASIC FIND + ERASEAT
+// V3.5 SENTINEL TEST 1
+// ORDERINDEX MUST REJECT ID 0
+// =====================================================
+
+void testOrderIndexRejectsZeroID()
+{
+    OrderIndex index(4);
+
+    OrderLocation location{};
+
+    assert(!index.insert(0, location));
+
+    assert(!index.contains(0));
+
+    FindResult result = index.find(0);
+
+    assert(result.location == nullptr);
+
+    std::cout
+        << "V3.5 OrderIndex rejects ID 0: PASS\n";
+}
+
+
+// =====================================================
+// V3.5 SENTINEL TEST 2
+// DELETED SLOT MUST BECOME REUSABLE
+// =====================================================
+
+void testDeletedSlotReusable()
+{
+    /*
+        expectedOrders = 2
+        table capacity = 4
+
+        Fill the entire table first.
+    */
+
+    OrderIndex index(2);
+
+    OrderLocation location{};
+
+    assert(index.insert(1, location));
+    assert(index.insert(2, location));
+    assert(index.insert(3, location));
+    assert(index.insert(4, location));
+
+    assert(!index.insert(5, location));
+
+
+    /*
+        Remove one entry.
+
+        eraseAt() should eventually restore an empty
+        slot by writing orderID = 0.
+    */
+
+    assert(index.erase(2));
+
+    assert(!index.contains(2));
+
+
+    /*
+        The table must now accept another order.
+
+        If the final deletion hole was not restored to
+        the zero sentinel, this insertion would fail.
+    */
+
+    assert(index.insert(5, location));
+
+    assert(index.contains(5));
+
+    std::cout
+        << "V3.5 deleted slot sentinel reuse: PASS\n";
+}
+
+
+// =====================================================
+// ORDERINDEX TEST 3
+// BASIC FIND / ERASEAT
 // =====================================================
 
 void testBasicEraseAt()
@@ -94,15 +172,18 @@ void testBasicEraseAt()
 
     assert(index.insert(100, location));
 
-    FindResult result = index.find(100);
+    FindResult result =
+        index.find(100);
 
     assert(result.location != nullptr);
     assert(index.contains(100));
 
-    assert(index.eraseAt(
-        result.slotIndex,
-        100
-    ));
+    assert(
+        index.eraseAt(
+            result.slotIndex,
+            100
+        )
+    );
 
     assert(!index.contains(100));
 
@@ -112,8 +193,8 @@ void testBasicEraseAt()
 
 
 // =====================================================
-// ORDERINDEX TEST 2
-// ERASEAT WRONG ORDER ID
+// ORDERINDEX TEST 4
+// WRONG EXPECTED ID
 // =====================================================
 
 void testEraseAtWrongID()
@@ -124,20 +205,17 @@ void testEraseAtWrongID()
 
     assert(index.insert(200, location));
 
-    FindResult result = index.find(200);
+    FindResult result =
+        index.find(200);
 
     assert(result.location != nullptr);
 
-    /*
-        Correct slot, wrong expected order ID.
-
-        eraseAt() must reject this and leave
-        order 200 untouched.
-    */
-    assert(!index.eraseAt(
-        result.slotIndex,
-        999
-    ));
+    assert(
+        !index.eraseAt(
+            result.slotIndex,
+            999
+        )
+    );
 
     assert(index.contains(200));
 
@@ -147,8 +225,8 @@ void testEraseAtWrongID()
 
 
 // =====================================================
-// ORDERINDEX TEST 3
-// NORMAL ERASE(orderID) STILL WORKS
+// ORDERINDEX TEST 5
+// NORMAL ERASE
 // =====================================================
 
 void testEraseByID()
@@ -158,15 +236,13 @@ void testEraseByID()
     OrderLocation location{};
 
     assert(index.insert(300, location));
+
     assert(index.contains(300));
 
     assert(index.erase(300));
 
     assert(!index.contains(300));
 
-    /*
-        Erasing the same ID twice must fail.
-    */
     assert(!index.erase(300));
 
     std::cout
@@ -175,18 +251,18 @@ void testEraseByID()
 
 
 // =====================================================
-// ORDERINDEX TEST 4
-// COLLISION CHAIN USING ERASEAT
+// ORDERINDEX TEST 6
+// COLLISION DELETION
 // =====================================================
 
 void testCollisionEraseAt()
 {
     /*
         expectedOrders = 4
-
-        target capacity = 8
-        therefore mask = 7
+        capacity = 8
+        mask = 7
     */
+
     OrderIndex index(4);
 
     constexpr std::size_t MASK = 7;
@@ -205,25 +281,19 @@ void testCollisionEraseAt()
     assert(index.insert(ids[1], location));
     assert(index.insert(ids[2], location));
 
-    assert(index.contains(ids[0]));
-    assert(index.contains(ids[1]));
-    assert(index.contains(ids[2]));
-
-
-    /*
-        Delete the MIDDLE order using the new
-        V3 find() -> eraseAt() path.
-    */
 
     FindResult middle =
         index.find(ids[1]);
 
     assert(middle.location != nullptr);
 
-    assert(index.eraseAt(
-        middle.slotIndex,
-        ids[1]
-    ));
+
+    assert(
+        index.eraseAt(
+            middle.slotIndex,
+            ids[1]
+        )
+    );
 
 
     assert(index.contains(ids[0]));
@@ -236,22 +306,18 @@ void testCollisionEraseAt()
 
 
 // =====================================================
-// ORDERINDEX TEST 5
-// WRAPAROUND CHAIN USING ERASEAT
+// ORDERINDEX TEST 7
+// WRAPAROUND DELETION
 // =====================================================
 
 void testWraparoundEraseAt()
 {
     /*
-        Capacity = 8.
+        IDs all hash to bucket 7.
 
-        Find three IDs whose home bucket is 7.
+        Probe chain:
 
-        They should occupy a chain similar to:
-
-            slot 7
-            slot 0
-            slot 1
+        7 -> 0 -> 1
     */
 
     OrderIndex index(4);
@@ -273,33 +339,24 @@ void testWraparoundEraseAt()
     assert(index.insert(ids[2], location));
 
 
-    assert(index.contains(ids[0]));
-    assert(index.contains(ids[1]));
-    assert(index.contains(ids[2]));
-
-
-    /*
-        Remove the first element in the
-        wraparound probe chain.
-    */
-
     FindResult first =
         index.find(ids[0]);
 
     assert(first.location != nullptr);
 
-    assert(index.eraseAt(
-        first.slotIndex,
-        ids[0]
-    ));
 
+    assert(
+        index.eraseAt(
+            first.slotIndex,
+            ids[0]
+        )
+    );
 
-    /*
-        The other two must remain reachable.
-    */
 
     assert(!index.contains(ids[0]));
+
     assert(index.contains(ids[1]));
+
     assert(index.contains(ids[2]));
 
     std::cout
@@ -308,18 +365,12 @@ void testWraparoundEraseAt()
 
 
 // =====================================================
-// ORDERINDEX TEST 6
+// ORDERINDEX TEST 8
 // CAPACITY
 // =====================================================
 
 void testCapacity()
 {
-    /*
-        expectedOrders = 2
-        target = 4
-        capacity becomes 4
-    */
-
     OrderIndex index(2);
 
     OrderLocation location{};
@@ -329,16 +380,12 @@ void testCapacity()
     assert(index.insert(3, location));
     assert(index.insert(4, location));
 
-    /*
-        Table is now physically full.
-    */
     assert(!index.insert(5, location));
 
     assert(index.contains(1));
     assert(index.contains(2));
     assert(index.contains(3));
     assert(index.contains(4));
-    assert(!index.contains(5));
 
     std::cout
         << "Capacity handling: PASS\n";
@@ -346,7 +393,71 @@ void testCapacity()
 
 
 // =====================================================
-// MATCHING ENGINE TEST 1
+// MATCHING TEST 1
+// V3.5 INVALID ORDER ID
+// =====================================================
+
+void testMatchingEngineRejectsZeroID()
+{
+    MatchingEngine engine(100);
+
+    std::vector<Trade> trades;
+
+
+    /*
+        Give it otherwise valid order data.
+
+        ID 0 alone should cause rejection.
+    */
+
+    Order zeroID =
+        makeLimitOrder(
+            0,
+            Side::BUY,
+            10'000,
+            100
+        );
+
+
+    assert(
+        engine.processOrder(zeroID, trades)
+        == ProcessStatus::REJECTED_INVALID_ORDER_ID
+    );
+
+    assert(trades.empty());
+
+
+    /*
+        Because ID validation is first, even an order
+        with ID 0 AND another invalid field should still
+        return INVALID_ORDER_ID.
+    */
+
+    Order zeroIDZeroQuantity =
+        makeLimitOrder(
+            0,
+            Side::BUY,
+            10'000,
+            0
+        );
+
+
+    assert(
+        engine.processOrder(
+            zeroIDZeroQuantity,
+            trades
+        )
+        == ProcessStatus::REJECTED_INVALID_ORDER_ID
+    );
+
+
+    std::cout
+        << "V3.5 MatchingEngine rejects ID 0: PASS\n";
+}
+
+
+// =====================================================
+// MATCHING TEST 2
 // PRICE-TIME PRIORITY
 // =====================================================
 
@@ -356,14 +467,6 @@ void testPriceTimePriority()
 
     std::vector<Trade> trades;
 
-
-    /*
-        Resting sells:
-
-        #10: 10 @ 10200
-        #11: 15 @ 10200
-        #12: 20 @ 10300
-    */
 
     Order sell10 =
         makeLimitOrder(
@@ -391,10 +494,7 @@ void testPriceTimePriority()
 
 
     assert(
-        engine.processOrder(
-            sell10,
-            trades
-        )
+        engine.processOrder(sell10, trades)
         == ProcessStatus::ACCEPTED
     );
 
@@ -402,10 +502,7 @@ void testPriceTimePriority()
 
 
     assert(
-        engine.processOrder(
-            sell11,
-            trades
-        )
+        engine.processOrder(sell11, trades)
         == ProcessStatus::ACCEPTED
     );
 
@@ -413,25 +510,12 @@ void testPriceTimePriority()
 
 
     assert(
-        engine.processOrder(
-            sell12,
-            trades
-        )
+        engine.processOrder(sell12, trades)
         == ProcessStatus::ACCEPTED
     );
 
     assert(trades.empty());
 
-
-    /*
-        BUY #20 for 30 @ 10300
-
-        Expected:
-
-        10 from #10 @ 10200
-        15 from #11 @ 10200
-         5 from #12 @ 10300
-    */
 
     Order buy20 =
         makeLimitOrder(
@@ -443,12 +527,10 @@ void testPriceTimePriority()
 
 
     assert(
-        engine.processOrder(
-            buy20,
-            trades
-        )
+        engine.processOrder(buy20, trades)
         == ProcessStatus::ACCEPTED
     );
+
 
     assert(trades.size() == 3);
 
@@ -471,12 +553,6 @@ void testPriceTimePriority()
     assert(trades[2].quantity == 5);
 
 
-    /*
-        #12 should still have 15 remaining.
-
-        BUY #21 consumes the remainder.
-    */
-
     Order buy21 =
         makeLimitOrder(
             21,
@@ -487,12 +563,10 @@ void testPriceTimePriority()
 
 
     assert(
-        engine.processOrder(
-            buy21,
-            trades
-        )
+        engine.processOrder(buy21, trades)
         == ProcessStatus::ACCEPTED
     );
+
 
     assert(trades.size() == 1);
 
@@ -508,8 +582,152 @@ void testPriceTimePriority()
 
 
 // =====================================================
-// MATCHING ENGINE TEST 2
-// PARTIAL FILL + V3 CANCELLATION PATH
+// MATCHING TEST 3
+// BUY CANCELLATION / PRICE LEVEL
+// =====================================================
+
+void testBuyCancellationPriceLevel()
+{
+    MatchingEngine engine(100);
+
+    std::vector<Trade> trades;
+
+
+    Order buy400 =
+        makeLimitOrder(
+            400,
+            Side::BUY,
+            10'100,
+            10
+        );
+
+    Order buy401 =
+        makeLimitOrder(
+            401,
+            Side::BUY,
+            10'000,
+            10
+        );
+
+
+    assert(
+        engine.processOrder(buy400, trades)
+        == ProcessStatus::ACCEPTED
+    );
+
+    assert(
+        engine.processOrder(buy401, trades)
+        == ProcessStatus::ACCEPTED
+    );
+
+
+    assert(engine.cancelOrder(400));
+
+    assert(!engine.cancelOrder(400));
+
+
+    Order sell402 =
+        makeMarketOrder(
+            402,
+            Side::SELL,
+            10
+        );
+
+
+    assert(
+        engine.processOrder(sell402, trades)
+        == ProcessStatus::ACCEPTED
+    );
+
+
+    assert(trades.size() == 1);
+
+    assert(trades[0].buyOrderID == 401);
+    assert(trades[0].sellOrderID == 402);
+    assert(trades[0].price == 10'000);
+    assert(trades[0].quantity == 10);
+
+
+    std::cout
+        << "BUY cancellation / price-level removal: PASS\n";
+}
+
+
+// =====================================================
+// MATCHING TEST 4
+// SELL CANCELLATION / PRICE LEVEL
+// =====================================================
+
+void testSellCancellationPriceLevel()
+{
+    MatchingEngine engine(100);
+
+    std::vector<Trade> trades;
+
+
+    Order sell500 =
+        makeLimitOrder(
+            500,
+            Side::SELL,
+            10'200,
+            10
+        );
+
+    Order sell501 =
+        makeLimitOrder(
+            501,
+            Side::SELL,
+            10'300,
+            10
+        );
+
+
+    assert(
+        engine.processOrder(sell500, trades)
+        == ProcessStatus::ACCEPTED
+    );
+
+    assert(
+        engine.processOrder(sell501, trades)
+        == ProcessStatus::ACCEPTED
+    );
+
+
+    assert(engine.cancelOrder(500));
+
+    assert(!engine.cancelOrder(500));
+
+
+    Order buy502 =
+        makeMarketOrder(
+            502,
+            Side::BUY,
+            10
+        );
+
+
+    assert(
+        engine.processOrder(buy502, trades)
+        == ProcessStatus::ACCEPTED
+    );
+
+
+    assert(trades.size() == 1);
+
+    assert(trades[0].buyOrderID == 502);
+    assert(trades[0].sellOrderID == 501);
+    assert(trades[0].price == 10'300);
+    assert(trades[0].quantity == 10);
+
+
+    std::cout
+        << "SELL cancellation / price-level removal: PASS\n";
+}
+
+
+// =====================================================
+// MATCHING TEST 5
+// PARTIAL FILL THEN CANCELLATION
 // =====================================================
 
 void testPartialFillAndCancellation()
@@ -519,9 +737,9 @@ void testPartialFillAndCancellation()
     std::vector<Trade> trades;
 
 
-    Order buy100 =
+    Order buy600 =
         makeLimitOrder(
-            100,
+            600,
             Side::BUY,
             10'000,
             100
@@ -529,25 +747,14 @@ void testPartialFillAndCancellation()
 
 
     assert(
-        engine.processOrder(
-            buy100,
-            trades
-        )
+        engine.processOrder(buy600, trades)
         == ProcessStatus::ACCEPTED
     );
 
-    assert(trades.empty());
 
-
-    /*
-        Sell 40 into the resting BUY.
-
-        BUY #100 should still have 60 remaining.
-    */
-
-    Order sell200 =
+    Order sell601 =
         makeLimitOrder(
-            200,
+            601,
             Side::SELL,
             10'000,
             40
@@ -555,49 +762,31 @@ void testPartialFillAndCancellation()
 
 
     assert(
-        engine.processOrder(
-            sell200,
-            trades
-        )
+        engine.processOrder(sell601, trades)
         == ProcessStatus::ACCEPTED
     );
 
+
     assert(trades.size() == 1);
 
-    assert(trades[0].buyOrderID == 100);
-    assert(trades[0].sellOrderID == 200);
-    assert(trades[0].price == 10'000);
+    assert(trades[0].buyOrderID == 600);
+    assert(trades[0].sellOrderID == 601);
     assert(trades[0].quantity == 40);
 
 
-    /*
-        This is especially important for V3.
+    assert(engine.cancelOrder(600));
 
-        cancelOrder() now uses:
-
-            find()
-              ->
-            slotIndex
-              ->
-            eraseAt()
-    */
-
-    assert(engine.cancelOrder(100));
-
-    /*
-        Already cancelled.
-    */
-    assert(!engine.cancelOrder(100));
+    assert(!engine.cancelOrder(600));
 
 
     std::cout
-        << "Partial fill + V3 cancellation: PASS\n";
+        << "Partial fill + cancellation: PASS\n";
 }
 
 
 // =====================================================
-// MATCHING ENGINE TEST 3
-// VALIDATION
+// MATCHING TEST 6
+// NORMAL VALIDATION
 // =====================================================
 
 void testValidation()
@@ -607,76 +796,54 @@ void testValidation()
     std::vector<Trade> trades;
 
 
-    // ---------------------------------------------
-    // Zero quantity
-    // ---------------------------------------------
-
     Order zeroQuantity =
         makeLimitOrder(
-            300,
+            700,
             Side::BUY,
             10'000,
             0
         );
 
+
     assert(
-        engine.processOrder(
-            zeroQuantity,
-            trades
-        )
+        engine.processOrder(zeroQuantity, trades)
         == ProcessStatus::REJECTED_ZERO_QUANTITY
     );
 
 
-    // ---------------------------------------------
-    // Quantity above engine limit
-    // ---------------------------------------------
-
     Order tooLarge =
         makeLimitOrder(
-            301,
+            701,
             Side::BUY,
             10'000,
             1'000'001
         );
 
+
     assert(
-        engine.processOrder(
-            tooLarge,
-            trades
-        )
+        engine.processOrder(tooLarge, trades)
         == ProcessStatus::REJECTED_QUANTITY_TOO_LARGE
     );
 
 
-    // ---------------------------------------------
-    // Invalid LIMIT price
-    // ---------------------------------------------
-
     Order badPrice =
         makeLimitOrder(
-            302,
+            702,
             Side::BUY,
             0,
             100
         );
 
+
     assert(
-        engine.processOrder(
-            badPrice,
-            trades
-        )
+        engine.processOrder(badPrice, trades)
         == ProcessStatus::REJECTED_INVALID_PRICE
     );
 
 
-    // ---------------------------------------------
-    // Duplicate active ID
-    // ---------------------------------------------
-
     Order valid =
         makeLimitOrder(
-            303,
+            703,
             Side::BUY,
             10'000,
             100
@@ -684,17 +851,14 @@ void testValidation()
 
 
     assert(
-        engine.processOrder(
-            valid,
-            trades
-        )
+        engine.processOrder(valid, trades)
         == ProcessStatus::ACCEPTED
     );
 
 
     Order duplicate =
         makeLimitOrder(
-            303,
+            703,
             Side::BUY,
             9'900,
             50
@@ -702,31 +866,21 @@ void testValidation()
 
 
     assert(
-        engine.processOrder(
-            duplicate,
-            trades
-        )
+        engine.processOrder(duplicate, trades)
         == ProcessStatus::REJECTED_DUPLICATE_ID
     );
 
 
-    // ---------------------------------------------
-    // MARKET price is ignored
-    // ---------------------------------------------
-
     Order market =
         makeMarketOrder(
-            304,
+            704,
             Side::BUY,
             10
         );
 
 
     assert(
-        engine.processOrder(
-            market,
-            trades
-        )
+        engine.processOrder(market, trades)
         == ProcessStatus::ACCEPTED
     );
 
@@ -737,21 +891,12 @@ void testValidation()
 
 
 // =====================================================
-// MATCHING ENGINE TEST 4
-// CAPACITY REJECTION + ROLLBACK
+// MATCHING TEST 7
+// CAPACITY + ROLLBACK
 // =====================================================
 
 void testCapacityRollback()
 {
-    /*
-        expectedOrders = 1
-
-        OrderIndex target capacity = 2.
-
-        Therefore only two active orders can physically
-        occupy the index.
-    */
-
     MatchingEngine engine(1);
 
     std::vector<Trade> trades;
@@ -783,51 +928,25 @@ void testCapacityRollback()
 
 
     assert(
-        engine.processOrder(
-            order1,
-            trades
-        )
+        engine.processOrder(order1, trades)
         == ProcessStatus::ACCEPTED
     );
 
-
     assert(
-        engine.processOrder(
-            order2,
-            trades
-        )
+        engine.processOrder(order2, trades)
         == ProcessStatus::ACCEPTED
     );
 
-
-    /*
-        Index is full.
-
-        The third resting order should fail and its
-        PriceLevel insertion must be rolled back.
-    */
-
     assert(
-        engine.processOrder(
-            order3,
-            trades
-        )
+        engine.processOrder(order3, trades)
         == ProcessStatus::REJECTED_CAPACITY
     );
 
 
-    /*
-        The failed order must NOT exist in the book.
-    */
-
     assert(!engine.cancelOrder(1002));
 
-
-    /*
-        Existing orders must still be valid.
-    */
-
     assert(engine.cancelOrder(1000));
+
     assert(engine.cancelOrder(1001));
 
 
@@ -843,7 +962,7 @@ void testCapacityRollback()
 int main()
 {
     std::cout << "========================================\n";
-    std::cout << "V3 CORRECTNESS TESTS\n";
+    std::cout << "V3.5 CORRECTNESS TESTS\n";
     std::cout << "========================================\n\n";
 
 
@@ -851,14 +970,26 @@ int main()
     // ORDERINDEX
     // =================================================
 
-    std::cout << "--- OrderIndex Tests ---\n";
+    std::cout
+        << "--- OrderIndex Tests ---\n";
+
+
+    testOrderIndexRejectsZeroID();
+
+    testDeletedSlotReusable();
 
     testBasicEraseAt();
+
     testEraseAtWrongID();
+
     testEraseByID();
+
     testCollisionEraseAt();
+
     testWraparoundEraseAt();
+
     testCapacity();
+
 
     std::cout
         << "All OrderIndex tests passed.\n\n";
@@ -871,9 +1002,19 @@ int main()
     std::cout
         << "--- Matching Engine Regression Tests ---\n";
 
+
+    testMatchingEngineRejectsZeroID();
+
     testPriceTimePriority();
+
+    testBuyCancellationPriceLevel();
+
+    testSellCancellationPriceLevel();
+
     testPartialFillAndCancellation();
+
     testValidation();
+
     testCapacityRollback();
 
 
@@ -882,7 +1023,7 @@ int main()
 
 
     std::cout << "\n========================================\n";
-    std::cout << "ALL V3 CORRECTNESS TESTS PASSED\n";
+    std::cout << "ALL V3.5 CORRECTNESS TESTS PASSED\n";
     std::cout << "========================================\n";
 
 

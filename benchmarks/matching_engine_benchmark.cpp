@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -6,9 +9,15 @@
 #include "trading/order.hpp"
 #include "trading/trade.hpp"
 
+using Clock = std::chrono::steady_clock;
+
+
+// =====================================================
+// TEST SETTINGS
+// =====================================================
 
 inline constexpr std::size_t NUMBER_OF_ORDERS = 1'000'000;
-inline constexpr std::size_t NUMBER_OF_PROFILE_RUNS = 10;
+inline constexpr std::size_t NUMBER_OF_RUNS = 10;
 
 inline constexpr int64_t PRICE = 10'000;
 inline constexpr uint32_t QUANTITY = 100;
@@ -34,36 +43,23 @@ Order makeOrder(uint64_t orderID)
 
 
 // =====================================================
-// PRELOAD
+// MEDIAN
 // =====================================================
 
-__declspec(noinline)
-void preloadOrderBook(
-    MatchingEngine& engine,
-    const std::vector<Order>& orders,
-    std::vector<Trade>& tradeBuffer)
+double median(std::vector<double> values)
 {
-    for(const Order& order : orders){
-        engine.processOrder(
-            order,
-            tradeBuffer
-        );
+    std::sort(values.begin(), values.end());
+
+    const std::size_t size = values.size();
+
+    if(size % 2 == 1){
+        return values[size / 2];
     }
-}
 
-
-// =====================================================
-// CANCELLATION WORKLOAD
-// =====================================================
-
-__declspec(noinline)
-void runCancellationWorkload(
-    MatchingEngine& engine,
-    const std::vector<Order>& orders)
-{
-    for(const Order& order : orders){
-        engine.cancelOrder(order.orderID);
-    }
+    return (
+        values[size / 2 - 1] +
+        values[size / 2]
+    ) / 2.0;
 }
 
 
@@ -73,8 +69,10 @@ void runCancellationWorkload(
 
 int main()
 {
+    std::cout << std::fixed << std::setprecision(6);
+
     std::cout << "========================================\n";
-    std::cout << "V2 SEQUENTIAL CANCEL CPU PROFILE\n";
+    std::cout << "V3.4 TEST: CANCEL - 1 LEVEL - SEQUENTIAL\n";
     std::cout << "========================================\n";
 
     std::cout
@@ -83,11 +81,8 @@ int main()
         << "\n";
 
     std::cout
-        << "Price levels: 1\n";
-
-    std::cout
-        << "Profile runs: "
-        << NUMBER_OF_PROFILE_RUNS
+        << "Measured runs: "
+        << NUMBER_OF_RUNS
         << "\n\n";
 
 
@@ -111,11 +106,19 @@ int main()
 
 
     // =================================================
-    // PROFILE RUNS
+    // STORE RUN TIMES
+    // =================================================
+
+    std::vector<double> runTimes;
+    runTimes.reserve(NUMBER_OF_RUNS);
+
+
+    // =================================================
+    // 10 INDEPENDENT RUNS
     // =================================================
 
     for(std::size_t run = 0;
-        run < NUMBER_OF_PROFILE_RUNS;
+        run < NUMBER_OF_RUNS;
         ++run)
     {
         MatchingEngine engine(NUMBER_OF_ORDERS);
@@ -123,33 +126,116 @@ int main()
         std::vector<Trade> tradeBuffer;
 
 
-        // Preload is separated in the call tree.
-        preloadOrderBook(
-            engine,
-            orders,
-            tradeBuffer
-        );
+        // =============================================
+        // PRELOAD - NOT TIMED
+        // =============================================
+
+        for(const Order& order : orders){
+            engine.processOrder(
+                order,
+                tradeBuffer
+            );
+        }
 
 
-        // Cancellation path we actually want to study.
-        runCancellationWorkload(
-            engine,
-            orders
-        );
+        // =============================================
+        // SEQUENTIAL CANCELLATION - TIMED
+        // =============================================
+
+        const auto start = Clock::now();
+
+
+        for(const Order& order : orders){
+            engine.cancelOrder(
+                order.orderID
+            );
+        }
+
+
+        const auto end = Clock::now();
+
+
+        // =============================================
+        // RESULTS FOR THIS RUN
+        // =============================================
+
+        const double seconds =
+            std::chrono::duration<double>(
+                end - start
+            ).count();
+
+
+        runTimes.push_back(seconds);
+
+
+        const double throughput =
+            static_cast<double>(
+                NUMBER_OF_ORDERS
+            ) / seconds;
+
+
+        const double nsPerCancel =
+            seconds * 1e9
+            / static_cast<double>(
+                NUMBER_OF_ORDERS
+            );
 
 
         std::cout
-            << "Completed profile run "
-            << run + 1
-            << " / "
-            << NUMBER_OF_PROFILE_RUNS
+            << "Run " << run + 1
+            << ": "
+            << seconds
+            << " s"
+            << " | "
+            << throughput
+            << " cancels/s"
+            << " | "
+            << nsPerCancel
+            << " ns/cancel"
             << "\n";
     }
 
 
+    // =================================================
+    // FINAL MEDIAN
+    // =================================================
+
+    const double medianSeconds =
+        median(runTimes);
+
+
+    const double medianThroughput =
+        static_cast<double>(
+            NUMBER_OF_ORDERS
+        ) / medianSeconds;
+
+
+    const double medianNsPerCancel =
+        medianSeconds * 1e9
+        / static_cast<double>(
+            NUMBER_OF_ORDERS
+        );
+
+
     std::cout << "\n========================================\n";
-    std::cout << "PROFILE WORKLOAD COMPLETE\n";
+    std::cout << "FINAL RESULT\n";
     std::cout << "========================================\n";
+
+    std::cout
+        << "Median: "
+        << medianSeconds
+        << " s\n";
+
+    std::cout
+        << "Throughput: "
+        << medianThroughput
+        << " cancels/s\n";
+
+    std::cout
+        << "Cost: "
+        << medianNsPerCancel
+        << " ns/cancel\n";
+
 
     return 0;
 }

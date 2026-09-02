@@ -6,7 +6,7 @@ OrderBook::OrderBook(std::size_t expectedOrders):orderLocations(expectedOrders){
 
 
 bool OrderBook::addOrder(const Order& order){
-    OrderLocation data = {order.side,order.price};
+    OrderLocation data{};
     if(order.side == Side::BUY){
         auto it = bids.try_emplace(order.price,order.price,&pool);
         
@@ -148,11 +148,14 @@ bool OrderBook::cancelOrder(uint64_t orderID){
     if(orderData.location == nullptr){
         return false;
     }
-
+    
+    auto iterator = orderData.location->orderIterator;
     auto priceLevel = orderData.location->priceLevel;
-    auto price = orderData.location->price;
-    auto side = orderData.location->side;
-    if(priceLevel->removeOrder(orderData.location->orderIterator)){
+
+    auto price = iterator->price;
+    auto side = iterator->side;
+
+    if(priceLevel->removeOrder(iterator)){
         orderLocations.eraseAt(orderData.slotIndex, orderID);
         if(priceLevel->isEmpty()){
             removePriceLevel(price,side);

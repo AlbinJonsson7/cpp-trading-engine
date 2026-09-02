@@ -7,8 +7,6 @@
 
 
 struct OrderLocation{
-    Side side;
-    int64_t price;
     std::pmr::list<Order>::iterator orderIterator;
     PriceLevel* priceLevel;
 };

@@ -8,7 +8,7 @@
 
 
 struct FindResult{
-    OrderLocation* location;
+    OrderLocation* location{};
     std::size_t slotIndex;
 };
 
