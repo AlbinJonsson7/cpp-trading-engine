@@ -14,6 +14,7 @@ class MatchingEngine{
     private:
         OrderBook orderBook;
         static constexpr uint32_t MAX_ORDER_QUANTITY = 1000000;
+        uint64_t highestOrderID = 0;
 
     public:
         MatchingEngine(std::size_t expectedOrders);

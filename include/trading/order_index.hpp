@@ -4,32 +4,27 @@
 #include <cstdint>
 #include <cstddef>
 #include <vector>
+#include <array>
+#include <memory>
 #include "order_location.hpp"
 
 
-struct FindResult{
-    OrderLocation* location{};
-    std::size_t slotIndex;
-};
-
 class OrderIndex{
     private:
-        struct Slot{
-            uint64_t orderID;
-            OrderLocation location;
-            bool occupied = false;
+        static constexpr uint32_t PAGE_SIZE = 4096;  
+        struct Page{
+            std::array<OrderLocation,PAGE_SIZE> locations;
+            std::size_t activeEntries = 0;
         };
-        std::vector<Slot> slots;
-        std::size_t activeEntries;
-        std::size_t tableCapacity;
+        std::vector<std::unique_ptr<Page>> pageDirectory;
+        uint64_t highestOrderID = 0;
 
     public:
         OrderIndex(std::size_t expectedOrders);
         bool insert(uint64_t orderID, OrderLocation location);
-        FindResult find(uint64_t orderID);
+        OrderLocation* find(uint64_t orderID);
         const OrderLocation* find(uint64_t orderID) const;
         bool erase(uint64_t orderID);
-        bool eraseAt(std::size_t slotIndex, uint64_t orderID);
         bool contains(uint64_t orderID) const;
 };
 

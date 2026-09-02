@@ -8,7 +8,7 @@
 
 struct OrderLocation{
     std::pmr::list<Order>::iterator orderIterator;
-    PriceLevel* priceLevel;
+    PriceLevel* priceLevel = nullptr;
 };
 
 

@@ -10,9 +10,13 @@ MatchingEngine::MatchingEngine(std::size_t expectedOrders):orderBook(expectedOrd
 ProcessStatus MatchingEngine::processOrder(const Order& incomingOrder, std::vector<Trade>& tradeBuffer){
     tradeBuffer.clear();
 
-    if (orderBook.containsOrder(incomingOrder.orderID)){
+    if(incomingOrder.orderID <= highestOrderID){
         return ProcessStatus::REJECTED_DUPLICATE_ID;
-    }else if(incomingOrder.remainingQuantity == 0){
+    }
+    
+    highestOrderID = incomingOrder.orderID;
+
+    if(incomingOrder.remainingQuantity == 0){
         return ProcessStatus::REJECTED_ZERO_QUANTITY;
     }else if(incomingOrder.remainingQuantity > MAX_ORDER_QUANTITY){
         return ProcessStatus::REJECTED_QUANTITY_TOO_LARGE;

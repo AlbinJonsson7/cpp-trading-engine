@@ -1,12 +1,13 @@
 #include <cassert>
 #include <cstdint>
-#include <functional>
 #include <iostream>
+#include <memory_resource>
 #include <vector>
 
 #include "trading/matching_engine.hpp"
 #include "trading/order.hpp"
 #include "trading/order_index.hpp"
+#include "trading/price_level.hpp"
 #include "trading/trade.hpp"
 
 
@@ -51,413 +52,303 @@ Order makeMarketOrder(
 }
 
 
-// =====================================================
-// FIND IDS THAT HASH TO SAME BUCKET
-// =====================================================
-
-std::vector<uint64_t> findIdsForBucket(
-    std::size_t bucket,
-    std::size_t mask,
-    std::size_t amount)
+OrderLocation makeIndexedLocation(
+    PriceLevel& priceLevel,
+    uint64_t orderID)
 {
-    std::vector<uint64_t> ids;
-    ids.reserve(amount);
+    Order order =
+        makeLimitOrder(
+            orderID,
+            Side::BUY,
+            priceLevel.getPrice(),
+            10
+        );
 
-    uint64_t candidate = 1;
+    OrderLocation location{};
+    location.orderIterator = priceLevel.addOrder(order);
+    location.priceLevel = &priceLevel;
 
-    while(ids.size() < amount){
-
-        const std::size_t home =
-            std::hash<uint64_t>{}(candidate) & mask;
-
-        if(home == bucket){
-            ids.push_back(candidate);
-        }
-
-        candidate++;
-    }
-
-    return ids;
+    return location;
 }
 
 
 // =====================================================
-// V3.5 SENTINEL TEST 1
-// ORDERINDEX MUST REJECT ID 0
+// PAGED ORDERINDEX TEST 1
+// ID 0 MUST BE REJECTED
 // =====================================================
 
 void testOrderIndexRejectsZeroID()
 {
     OrderIndex index(4);
-
     OrderLocation location{};
 
     assert(!index.insert(0, location));
-
     assert(!index.contains(0));
-
-    FindResult result = index.find(0);
-
-    assert(result.location == nullptr);
+    assert(index.find(0) == nullptr);
+    assert(!index.erase(0));
 
     std::cout
-        << "V3.5 OrderIndex rejects ID 0: PASS\n";
+        << "Paged OrderIndex rejects ID 0: PASS\n";
 }
 
 
 // =====================================================
-// V3.5 SENTINEL TEST 2
-// DELETED SLOT MUST BECOME REUSABLE
+// PAGED ORDERINDEX TEST 2
+// BASIC INSERT / FIND / ERASE
 // =====================================================
 
-void testDeletedSlotReusable()
-{
-    /*
-        expectedOrders = 2
-        table capacity = 4
-
-        Fill the entire table first.
-    */
-
-    OrderIndex index(2);
-
-    OrderLocation location{};
-
-    assert(index.insert(1, location));
-    assert(index.insert(2, location));
-    assert(index.insert(3, location));
-    assert(index.insert(4, location));
-
-    assert(!index.insert(5, location));
-
-
-    /*
-        Remove one entry.
-
-        eraseAt() should eventually restore an empty
-        slot by writing orderID = 0.
-    */
-
-    assert(index.erase(2));
-
-    assert(!index.contains(2));
-
-
-    /*
-        The table must now accept another order.
-
-        If the final deletion hole was not restored to
-        the zero sentinel, this insertion would fail.
-    */
-
-    assert(index.insert(5, location));
-
-    assert(index.contains(5));
-
-    std::cout
-        << "V3.5 deleted slot sentinel reuse: PASS\n";
-}
-
-
-// =====================================================
-// ORDERINDEX TEST 3
-// BASIC FIND / ERASEAT
-// =====================================================
-
-void testBasicEraseAt()
+void testBasicInsertFindErase()
 {
     OrderIndex index(4);
+    PriceLevel priceLevel(
+        10'000,
+        std::pmr::get_default_resource()
+    );
 
-    OrderLocation location{};
+    OrderLocation location =
+        makeIndexedLocation(priceLevel, 100);
 
     assert(index.insert(100, location));
-
-    FindResult result =
-        index.find(100);
-
-    assert(result.location != nullptr);
     assert(index.contains(100));
 
-    assert(
-        index.eraseAt(
-            result.slotIndex,
-            100
-        )
-    );
+    OrderLocation* result = index.find(100);
 
+    assert(result != nullptr);
+    assert(result->priceLevel == &priceLevel);
+    assert(result->orderIterator->orderID == 100);
+
+    assert(index.erase(100));
     assert(!index.contains(100));
+    assert(index.find(100) == nullptr);
+    assert(!index.erase(100));
 
     std::cout
-        << "Basic find/eraseAt: PASS\n";
+        << "Basic paged insert/find/erase: PASS\n";
 }
 
 
 // =====================================================
-// ORDERINDEX TEST 4
-// WRONG EXPECTED ID
+// PAGED ORDERINDEX TEST 3
+// ACTIVE DUPLICATE MUST BE REJECTED
 // =====================================================
 
-void testEraseAtWrongID()
+void testActiveDuplicateRejected()
 {
     OrderIndex index(4);
 
-    OrderLocation location{};
-
-    assert(index.insert(200, location));
-
-    FindResult result =
-        index.find(200);
-
-    assert(result.location != nullptr);
-
-    assert(
-        !index.eraseAt(
-            result.slotIndex,
-            999
-        )
+    PriceLevel firstLevel(
+        10'000,
+        std::pmr::get_default_resource()
     );
 
-    assert(index.contains(200));
-
-    std::cout
-        << "eraseAt ID validation: PASS\n";
-}
-
-
-// =====================================================
-// ORDERINDEX TEST 5
-// NORMAL ERASE
-// =====================================================
-
-void testEraseByID()
-{
-    OrderIndex index(4);
-
-    OrderLocation location{};
-
-    assert(index.insert(300, location));
-
-    assert(index.contains(300));
-
-    assert(index.erase(300));
-
-    assert(!index.contains(300));
-
-    assert(!index.erase(300));
-
-    std::cout
-        << "erase(orderID): PASS\n";
-}
-
-
-// =====================================================
-// ORDERINDEX TEST 6
-// COLLISION DELETION
-// =====================================================
-
-void testCollisionEraseAt()
-{
-    /*
-        expectedOrders = 4
-        capacity = 8
-        mask = 7
-    */
-
-    OrderIndex index(4);
-
-    constexpr std::size_t MASK = 7;
-    constexpr std::size_t BUCKET = 3;
-
-    const auto ids =
-        findIdsForBucket(
-            BUCKET,
-            MASK,
-            3
-        );
-
-    OrderLocation location{};
-
-    assert(index.insert(ids[0], location));
-    assert(index.insert(ids[1], location));
-    assert(index.insert(ids[2], location));
-
-
-    FindResult middle =
-        index.find(ids[1]);
-
-    assert(middle.location != nullptr);
-
-
-    assert(
-        index.eraseAt(
-            middle.slotIndex,
-            ids[1]
-        )
+    PriceLevel secondLevel(
+        9'900,
+        std::pmr::get_default_resource()
     );
 
+    OrderLocation firstLocation =
+        makeIndexedLocation(firstLevel, 200);
 
-    assert(index.contains(ids[0]));
-    assert(!index.contains(ids[1]));
-    assert(index.contains(ids[2]));
+    OrderLocation duplicateLocation =
+        makeIndexedLocation(secondLevel, 200);
+
+    assert(index.insert(200, firstLocation));
+    assert(!index.insert(200, duplicateLocation));
+
+    OrderLocation* result = index.find(200);
+
+    assert(result != nullptr);
+    assert(result->priceLevel == &firstLevel);
 
     std::cout
-        << "Collision eraseAt deletion: PASS\n";
+        << "Active duplicate rejection: PASS\n";
 }
 
 
 // =====================================================
-// ORDERINDEX TEST 7
-// WRAPAROUND DELETION
+// PAGED ORDERINDEX TEST 4
+// PAGE BOUNDARIES
 // =====================================================
 
-void testWraparoundEraseAt()
+void testPageBoundaries()
 {
-    /*
-        IDs all hash to bucket 7.
-
-        Probe chain:
-
-        7 -> 0 -> 1
-    */
-
     OrderIndex index(4);
-
-    constexpr std::size_t MASK = 7;
-    constexpr std::size_t BUCKET = 7;
-
-    const auto ids =
-        findIdsForBucket(
-            BUCKET,
-            MASK,
-            3
-        );
-
-    OrderLocation location{};
-
-    assert(index.insert(ids[0], location));
-    assert(index.insert(ids[1], location));
-    assert(index.insert(ids[2], location));
-
-
-    FindResult first =
-        index.find(ids[0]);
-
-    assert(first.location != nullptr);
-
-
-    assert(
-        index.eraseAt(
-            first.slotIndex,
-            ids[0]
-        )
+    PriceLevel priceLevel(
+        10'000,
+        std::pmr::get_default_resource()
     );
 
+    const uint64_t ids[] = {
+        1,
+        4096,
+        4097,
+        8192,
+        8193
+    };
 
-    assert(!index.contains(ids[0]));
+    for(uint64_t id : ids){
+        OrderLocation location =
+            makeIndexedLocation(priceLevel, id);
 
-    assert(index.contains(ids[1]));
+        assert(index.insert(id, location));
+    }
 
-    assert(index.contains(ids[2]));
+    for(uint64_t id : ids){
+        OrderLocation* result = index.find(id);
+
+        assert(result != nullptr);
+        assert(result->orderIterator->orderID == id);
+        assert(index.contains(id));
+    }
+
+    assert(!index.contains(4095));
+    assert(!index.contains(4098));
 
     std::cout
-        << "Wraparound eraseAt deletion: PASS\n";
+        << "Page boundary mapping: PASS\n";
 }
 
 
 // =====================================================
-// ORDERINDEX TEST 8
-// CAPACITY
+// PAGED ORDERINDEX TEST 5
+// SPARSE DIRECTORY GROWTH
 // =====================================================
 
-void testCapacity()
+void testSparsePageGrowth()
 {
-    OrderIndex index(2);
+    OrderIndex index(1);
+    PriceLevel priceLevel(
+        10'000,
+        std::pmr::get_default_resource()
+    );
 
-    OrderLocation location{};
+    OrderLocation first =
+        makeIndexedLocation(priceLevel, 1);
 
-    assert(index.insert(1, location));
-    assert(index.insert(2, location));
-    assert(index.insert(3, location));
-    assert(index.insert(4, location));
+    OrderLocation farAway =
+        makeIndexedLocation(priceLevel, 20'000);
 
-    assert(!index.insert(5, location));
+    assert(index.insert(1, first));
+    assert(index.insert(20'000, farAway));
 
     assert(index.contains(1));
-    assert(index.contains(2));
-    assert(index.contains(3));
-    assert(index.contains(4));
+    assert(index.contains(20'000));
+
+    assert(!index.contains(4097));
+    assert(!index.contains(12'000));
 
     std::cout
-        << "Capacity handling: PASS\n";
+        << "Sparse page-directory growth: PASS\n";
+}
+
+
+// =====================================================
+// PAGED ORDERINDEX TEST 6
+// PAGE RECLAMATION + REALLOCATION
+// =====================================================
+
+void testPageReclamationAndReallocation()
+{
+    OrderIndex index(4);
+    PriceLevel priceLevel(
+        10'000,
+        std::pmr::get_default_resource()
+    );
+
+    OrderLocation first =
+        makeIndexedLocation(priceLevel, 1);
+
+    OrderLocation second =
+        makeIndexedLocation(priceLevel, 2);
+
+    assert(index.insert(1, first));
+    assert(index.insert(2, second));
+
+    assert(index.erase(1));
+    assert(!index.contains(1));
+    assert(index.contains(2));
+
+    assert(index.erase(2));
+    assert(!index.contains(2));
+
+    OrderLocation third =
+        makeIndexedLocation(priceLevel, 3);
+
+    assert(index.insert(3, third));
+    assert(index.contains(3));
+
+    std::cout
+        << "Page reclamation / reallocation: PASS\n";
+}
+
+
+// =====================================================
+// PAGED ORDERINDEX TEST 7
+// RECLAIMING ONE PAGE MUST NOT AFFECT ANOTHER
+// =====================================================
+
+void testCrossPageEraseIsolation()
+{
+    OrderIndex index(4);
+    PriceLevel priceLevel(
+        10'000,
+        std::pmr::get_default_resource()
+    );
+
+    OrderLocation pageZero =
+        makeIndexedLocation(priceLevel, 4096);
+
+    OrderLocation pageOne =
+        makeIndexedLocation(priceLevel, 4097);
+
+    assert(index.insert(4096, pageZero));
+    assert(index.insert(4097, pageOne));
+
+    assert(index.erase(4096));
+
+    assert(!index.contains(4096));
+    assert(index.contains(4097));
+
+    std::cout
+        << "Cross-page erase isolation: PASS\n";
+}
+
+
+// =====================================================
+// PAGED ORDERINDEX TEST 8
+// expectedOrders IS A RESERVE HINT, NOT A HARD CAPACITY
+// =====================================================
+
+void testExpectedOrdersIsReserveHint()
+{
+    OrderIndex index(1);
+    PriceLevel priceLevel(
+        10'000,
+        std::pmr::get_default_resource()
+    );
+
+    const uint64_t ids[] = {
+        1,
+        4097,
+        8193,
+        12'289
+    };
+
+    for(uint64_t id : ids){
+        OrderLocation location =
+            makeIndexedLocation(priceLevel, id);
+
+        assert(index.insert(id, location));
+        assert(index.contains(id));
+    }
+
+    std::cout
+        << "expectedOrders reserve-hint behavior: PASS\n";
 }
 
 
 // =====================================================
 // MATCHING TEST 1
-// V3.5 INVALID ORDER ID
-// =====================================================
-
-void testMatchingEngineRejectsZeroID()
-{
-    MatchingEngine engine(100);
-
-    std::vector<Trade> trades;
-
-
-    /*
-        Give it otherwise valid order data.
-
-        ID 0 alone should cause rejection.
-    */
-
-    Order zeroID =
-        makeLimitOrder(
-            0,
-            Side::BUY,
-            10'000,
-            100
-        );
-
-
-    assert(
-        engine.processOrder(zeroID, trades)
-        == ProcessStatus::REJECTED_INVALID_ORDER_ID
-    );
-
-    assert(trades.empty());
-
-
-    /*
-        Because ID validation is first, even an order
-        with ID 0 AND another invalid field should still
-        return INVALID_ORDER_ID.
-    */
-
-    Order zeroIDZeroQuantity =
-        makeLimitOrder(
-            0,
-            Side::BUY,
-            10'000,
-            0
-        );
-
-
-    assert(
-        engine.processOrder(
-            zeroIDZeroQuantity,
-            trades
-        )
-        == ProcessStatus::REJECTED_INVALID_ORDER_ID
-    );
-
-
-    std::cout
-        << "V3.5 MatchingEngine rejects ID 0: PASS\n";
-}
-
-
-// =====================================================
-// MATCHING TEST 2
 // PRICE-TIME PRIORITY
 // =====================================================
 
@@ -582,7 +473,7 @@ void testPriceTimePriority()
 
 
 // =====================================================
-// MATCHING TEST 3
+// MATCHING TEST 2
 // BUY CANCELLATION / PRICE LEVEL
 // =====================================================
 
@@ -654,7 +545,7 @@ void testBuyCancellationPriceLevel()
 
 
 // =====================================================
-// MATCHING TEST 4
+// MATCHING TEST 3
 // SELL CANCELLATION / PRICE LEVEL
 // =====================================================
 
@@ -726,7 +617,7 @@ void testSellCancellationPriceLevel()
 
 
 // =====================================================
-// MATCHING TEST 5
+// MATCHING TEST 4
 // PARTIAL FILL THEN CANCELLATION
 // =====================================================
 
@@ -785,7 +676,7 @@ void testPartialFillAndCancellation()
 
 
 // =====================================================
-// MATCHING TEST 6
+// MATCHING TEST 5
 // NORMAL VALIDATION
 // =====================================================
 
@@ -891,68 +782,126 @@ void testValidation()
 
 
 // =====================================================
-// MATCHING TEST 7
-// CAPACITY + ROLLBACK
+// MATCHING TEST 6
+// PAGED ORDER-ID BOUNDARIES THROUGH THE FULL ENGINE
 // =====================================================
 
-void testCapacityRollback()
+void testPagedOrderIDsThroughMatchingEngine()
 {
-    MatchingEngine engine(1);
-
+    MatchingEngine engine(4);
     std::vector<Trade> trades;
 
-
-    Order order1 =
+    Order order4096 =
         makeLimitOrder(
-            1000,
+            4096,
             Side::BUY,
             9'900,
             10
         );
 
-    Order order2 =
+    Order order4097 =
         makeLimitOrder(
-            1001,
+            4097,
             Side::BUY,
             9'800,
             10
         );
 
-    Order order3 =
+    Order order8193 =
         makeLimitOrder(
-            1002,
+            8193,
             Side::BUY,
             9'700,
             10
         );
 
-
     assert(
-        engine.processOrder(order1, trades)
+        engine.processOrder(order4096, trades)
         == ProcessStatus::ACCEPTED
     );
 
     assert(
-        engine.processOrder(order2, trades)
+        engine.processOrder(order4097, trades)
         == ProcessStatus::ACCEPTED
     );
 
     assert(
-        engine.processOrder(order3, trades)
-        == ProcessStatus::REJECTED_CAPACITY
+        engine.processOrder(order8193, trades)
+        == ProcessStatus::ACCEPTED
     );
 
+    assert(engine.cancelOrder(4096));
+    assert(engine.cancelOrder(4097));
+    assert(engine.cancelOrder(8193));
 
-    assert(!engine.cancelOrder(1002));
-
-    assert(engine.cancelOrder(1000));
-
-    assert(engine.cancelOrder(1001));
-
+    assert(!engine.cancelOrder(4096));
+    assert(!engine.cancelOrder(4097));
+    assert(!engine.cancelOrder(8193));
 
     std::cout
-        << "Capacity rejection + rollback: PASS\n";
+        << "Paged IDs through MatchingEngine: PASS\n";
 }
+
+
+
+void testMonotonicOrderIDs()
+{
+    MatchingEngine engine(100);
+    std::vector<Trade> trades;
+
+    Order order100 = makeLimitOrder(100, Side::BUY, 10'000, 10);
+    Order order105 = makeLimitOrder(105, Side::BUY, 9'900, 10);
+    Order order104 = makeLimitOrder(104, Side::BUY, 9'800, 10);
+    Order duplicate105 = makeLimitOrder(105, Side::BUY, 9'700, 10);
+    Order order106 = makeLimitOrder(106, Side::BUY, 9'600, 10);
+
+    assert(engine.processOrder(order100, trades) == ProcessStatus::ACCEPTED);
+    assert(engine.processOrder(order105, trades) == ProcessStatus::ACCEPTED);
+
+    // Lower than highest submitted ID.
+    assert(engine.processOrder(order104, trades)
+           == ProcessStatus::REJECTED_DUPLICATE_ID);
+
+    // Same as highest submitted ID.
+    assert(engine.processOrder(duplicate105, trades)
+           == ProcessStatus::REJECTED_DUPLICATE_ID);
+
+    // Increasing again.
+    assert(engine.processOrder(order106, trades)
+           == ProcessStatus::ACCEPTED);
+
+    std::cout << "Monotonic order IDs: PASS\n";
+}
+
+
+
+void testRejectedOrderConsumesID()
+{
+    MatchingEngine engine(100);
+    std::vector<Trade> trades;
+
+    Order invalid200 =
+        makeLimitOrder(200, Side::BUY, 10'000, 0);
+
+    Order reused200 =
+        makeLimitOrder(200, Side::BUY, 10'000, 10);
+
+    Order valid201 =
+        makeLimitOrder(201, Side::BUY, 10'000, 10);
+
+    assert(engine.processOrder(invalid200, trades)
+           == ProcessStatus::REJECTED_ZERO_QUANTITY);
+
+    // ID 200 was already submitted, even though the order was rejected.
+    assert(engine.processOrder(reused200, trades)
+           == ProcessStatus::REJECTED_DUPLICATE_ID);
+
+    assert(engine.processOrder(valid201, trades)
+           == ProcessStatus::ACCEPTED);
+
+    std::cout << "Rejected order consumes ID: PASS\n";
+}
+
 
 
 // =====================================================
@@ -962,7 +911,7 @@ void testCapacityRollback()
 int main()
 {
     std::cout << "========================================\n";
-    std::cout << "V3.5 CORRECTNESS TESTS\n";
+    std::cout << "PAGED ORDER INDEX CORRECTNESS TESTS\n";
     std::cout << "========================================\n\n";
 
 
@@ -976,23 +925,27 @@ int main()
 
     testOrderIndexRejectsZeroID();
 
-    testDeletedSlotReusable();
+    testBasicInsertFindErase();
 
-    testBasicEraseAt();
+    testActiveDuplicateRejected();
 
-    testEraseAtWrongID();
+    testPageBoundaries();
 
-    testEraseByID();
+    testSparsePageGrowth();
 
-    testCollisionEraseAt();
+    testPageReclamationAndReallocation();
 
-    testWraparoundEraseAt();
+    testCrossPageEraseIsolation();
 
-    testCapacity();
+    testExpectedOrdersIsReserveHint();
+
+    testMonotonicOrderIDs();
+
+    testRejectedOrderConsumesID();
 
 
     std::cout
-        << "All OrderIndex tests passed.\n\n";
+        << "All paged OrderIndex tests passed.\n\n";
 
 
     // =================================================
@@ -1002,8 +955,6 @@ int main()
     std::cout
         << "--- Matching Engine Regression Tests ---\n";
 
-
-    testMatchingEngineRejectsZeroID();
 
     testPriceTimePriority();
 
@@ -1015,7 +966,7 @@ int main()
 
     testValidation();
 
-    testCapacityRollback();
+    testPagedOrderIDsThroughMatchingEngine();
 
 
     std::cout
@@ -1023,7 +974,7 @@ int main()
 
 
     std::cout << "\n========================================\n";
-    std::cout << "ALL V3.5 CORRECTNESS TESTS PASSED\n";
+    std::cout << "ALL PAGED-INDEX CORRECTNESS TESTS PASSED\n";
     std::cout << "========================================\n";
 
 

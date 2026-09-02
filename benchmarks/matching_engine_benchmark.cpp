@@ -9,6 +9,7 @@
 #include "trading/order.hpp"
 #include "trading/trade.hpp"
 
+
 using Clock = std::chrono::steady_clock;
 
 
@@ -16,23 +17,29 @@ using Clock = std::chrono::steady_clock;
 // TEST SETTINGS
 // =====================================================
 
-inline constexpr std::size_t NUMBER_OF_ORDERS = 1'000'000;
+inline constexpr std::size_t BATCH_SIZE = 100;
+inline constexpr std::size_t NUMBER_OF_BATCHES = 1'000;
 inline constexpr std::size_t NUMBER_OF_RUNS = 10;
 
+inline constexpr std::size_t TOTAL_ORDERS =
+    BATCH_SIZE * NUMBER_OF_BATCHES;
+
 inline constexpr int64_t PRICE = 10'000;
-inline constexpr uint32_t QUANTITY = 100;
+inline constexpr uint32_t QUANTITY = 1;
 
 
 // =====================================================
 // CREATE ORDER
 // =====================================================
 
-Order makeOrder(uint64_t orderID)
+Order makeOrder(
+    uint64_t orderID,
+    Side side)
 {
     Order order{};
 
     order.orderID = orderID;
-    order.side = Side::BUY;
+    order.side = side;
     order.price = PRICE;
     order.originalQuantity = QUANTITY;
     order.remainingQuantity = QUANTITY;
@@ -64,20 +71,61 @@ double median(std::vector<double> values)
 
 
 // =====================================================
+// PERCENTILE
+// =====================================================
+
+double percentile(
+    std::vector<double> values,
+    double p)
+{
+    std::sort(values.begin(), values.end());
+
+    if(values.empty()){
+        return 0.0;
+    }
+
+    const double position =
+        p * static_cast<double>(
+            values.size() - 1
+        );
+
+    const std::size_t index =
+        static_cast<std::size_t>(position);
+
+    return values[index];
+}
+
+
+// =====================================================
 // MAIN
 // =====================================================
 
 int main()
 {
-    std::cout << std::fixed << std::setprecision(6);
+    std::cout << std::fixed << std::setprecision(3);
 
     std::cout << "========================================\n";
-    std::cout << "V3.4 TEST: CANCEL - 1 LEVEL - SEQUENTIAL\n";
+    std::cout << "TEST 12: BATCH LATENCY - MATCH 1-to-1\n";
     std::cout << "========================================\n";
 
     std::cout
-        << "Orders per run: "
-        << NUMBER_OF_ORDERS
+        << "Batch size: "
+        << BATCH_SIZE
+        << "\n";
+
+    std::cout
+        << "Batches per run: "
+        << NUMBER_OF_BATCHES
+        << "\n";
+
+    std::cout
+        << "Incoming orders per run: "
+        << TOTAL_ORDERS
+        << "\n";
+
+    std::cout
+        << "Resting orders per run: "
+        << TOTAL_ORDERS
         << "\n";
 
     std::cout
@@ -87,30 +135,58 @@ int main()
 
 
     // =================================================
-    // GENERATE ORDERS ONCE
+    // GENERATE RESTING SELL ORDERS
     // =================================================
 
-    std::vector<Order> orders;
-    orders.reserve(NUMBER_OF_ORDERS);
+    std::vector<Order> restingOrders;
+    restingOrders.reserve(TOTAL_ORDERS);
 
     for(std::size_t i = 0;
-        i < NUMBER_OF_ORDERS;
+        i < TOTAL_ORDERS;
         ++i)
     {
-        orders.push_back(
+        restingOrders.push_back(
             makeOrder(
-                static_cast<uint64_t>(i + 1)
+                static_cast<uint64_t>(i + 1),
+                Side::SELL
             )
         );
     }
 
 
     // =================================================
-    // STORE RUN TIMES
+    // GENERATE INCOMING BUY ORDERS
     // =================================================
 
-    std::vector<double> runTimes;
-    runTimes.reserve(NUMBER_OF_RUNS);
+    std::vector<Order> incomingOrders;
+    incomingOrders.reserve(TOTAL_ORDERS);
+
+    for(std::size_t i = 0;
+        i < TOTAL_ORDERS;
+        ++i)
+    {
+        incomingOrders.push_back(
+            makeOrder(
+                static_cast<uint64_t>(
+                    1'000'000 + i
+                ),
+                Side::BUY
+            )
+        );
+    }
+
+
+    // =================================================
+    // STORE EACH RUN'S PERCENTILES
+    // =================================================
+
+    std::vector<double> runP50s;
+    std::vector<double> runP95s;
+    std::vector<double> runP99s;
+
+    runP50s.reserve(NUMBER_OF_RUNS);
+    runP95s.reserve(NUMBER_OF_RUNS);
+    runP99s.reserve(NUMBER_OF_RUNS);
 
 
     // =================================================
@@ -121,16 +197,20 @@ int main()
         run < NUMBER_OF_RUNS;
         ++run)
     {
-        MatchingEngine engine(NUMBER_OF_ORDERS);
+        MatchingEngine engine(TOTAL_ORDERS);
 
+        /*
+            One reusable V2 trade buffer for the entire
+            MatchingEngine run.
+        */
         std::vector<Trade> tradeBuffer;
 
 
         // =============================================
-        // PRELOAD - NOT TIMED
+        // PRELOAD RESTING ORDERS - NOT TIMED
         // =============================================
 
-        for(const Order& order : orders){
+        for(const Order& order : restingOrders){
             engine.processOrder(
                 order,
                 tradeBuffer
@@ -138,83 +218,109 @@ int main()
         }
 
 
+        /*
+            Each element stores the average matching
+            latency per order inside one batch of
+            100 incoming orders.
+        */
+        std::vector<double> batchLatencies;
+        batchLatencies.reserve(NUMBER_OF_BATCHES);
+
+
         // =============================================
-        // SEQUENTIAL CANCELLATION - TIMED
+        // MEASURE 1,000 MATCHING BATCHES
         // =============================================
 
-        const auto start = Clock::now();
+        for(std::size_t batch = 0;
+            batch < NUMBER_OF_BATCHES;
+            ++batch)
+        {
+            const std::size_t startIndex =
+                batch * BATCH_SIZE;
 
 
-        for(const Order& order : orders){
-            engine.cancelOrder(
-                order.orderID
+            const auto start = Clock::now();
+
+
+            for(std::size_t i = 0;
+                i < BATCH_SIZE;
+                ++i)
+            {
+                engine.processOrder(
+                    incomingOrders[startIndex + i],
+                    tradeBuffer
+                );
+            }
+
+
+            const auto end = Clock::now();
+
+
+            const double batchNanoseconds =
+                std::chrono::duration<double, std::nano>(
+                    end - start
+                ).count();
+
+
+            /*
+                Convert the time for the entire
+                100-order batch into average
+                nanoseconds per incoming order.
+            */
+            const double nsPerIncoming =
+                batchNanoseconds /
+                static_cast<double>(BATCH_SIZE);
+
+
+            batchLatencies.push_back(
+                nsPerIncoming
             );
         }
 
 
-        const auto end = Clock::now();
-
-
         // =============================================
-        // RESULTS FOR THIS RUN
+        // PERCENTILES FOR THIS RUN
         // =============================================
 
-        const double seconds =
-            std::chrono::duration<double>(
-                end - start
-            ).count();
+        const double p50 =
+            percentile(batchLatencies, 0.50);
+
+        const double p95 =
+            percentile(batchLatencies, 0.95);
+
+        const double p99 =
+            percentile(batchLatencies, 0.99);
 
 
-        runTimes.push_back(seconds);
-
-
-        const double throughput =
-            static_cast<double>(
-                NUMBER_OF_ORDERS
-            ) / seconds;
-
-
-        const double nsPerCancel =
-            seconds * 1e9
-            / static_cast<double>(
-                NUMBER_OF_ORDERS
-            );
+        runP50s.push_back(p50);
+        runP95s.push_back(p95);
+        runP99s.push_back(p99);
 
 
         std::cout
             << "Run " << run + 1
             << ": "
-            << seconds
-            << " s"
+            << "p50 = " << p50 << " ns/order"
             << " | "
-            << throughput
-            << " cancels/s"
+            << "p95 = " << p95 << " ns/order"
             << " | "
-            << nsPerCancel
-            << " ns/cancel"
+            << "p99 = " << p99 << " ns/order"
             << "\n";
     }
 
 
     // =================================================
-    // FINAL MEDIAN
+    // FINAL RESULTS
     // =================================================
 
-    const double medianSeconds =
-        median(runTimes);
+    const double finalP50 =
+        median(runP50s);
 
+    const double finalP95 =
+        median(runP95s);
 
-    const double medianThroughput =
-        static_cast<double>(
-            NUMBER_OF_ORDERS
-        ) / medianSeconds;
-
-
-    const double medianNsPerCancel =
-        medianSeconds * 1e9
-        / static_cast<double>(
-            NUMBER_OF_ORDERS
-        );
+    const double finalP99 =
+        median(runP99s);
 
 
     std::cout << "\n========================================\n";
@@ -222,19 +328,19 @@ int main()
     std::cout << "========================================\n";
 
     std::cout
-        << "Median: "
-        << medianSeconds
-        << " s\n";
+        << "Median p50: "
+        << finalP50
+        << " ns/order\n";
 
     std::cout
-        << "Throughput: "
-        << medianThroughput
-        << " cancels/s\n";
+        << "Median p95: "
+        << finalP95
+        << " ns/order\n";
 
     std::cout
-        << "Cost: "
-        << medianNsPerCancel
-        << " ns/cancel\n";
+        << "Median p99: "
+        << finalP99
+        << " ns/order\n";
 
 
     return 0;

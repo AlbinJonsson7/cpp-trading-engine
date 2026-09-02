@@ -144,19 +144,19 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
 
 bool OrderBook::cancelOrder(uint64_t orderID){
 
-    FindResult orderData = orderLocations.find(orderID);
-    if(orderData.location == nullptr){
+    OrderLocation* orderData = orderLocations.find(orderID);
+    if(orderData == nullptr){
         return false;
     }
-    
-    auto iterator = orderData.location->orderIterator;
-    auto priceLevel = orderData.location->priceLevel;
+
+    auto iterator = orderData->orderIterator;
+    auto priceLevel = orderData->priceLevel;
 
     auto price = iterator->price;
     auto side = iterator->side;
 
     if(priceLevel->removeOrder(iterator)){
-        orderLocations.eraseAt(orderData.slotIndex, orderID);
+        orderLocations.erase(orderID);
         if(priceLevel->isEmpty()){
             removePriceLevel(price,side);
         }
