@@ -2,28 +2,45 @@
 #include "trading/order_book.hpp"
 
 
-OrderBook::OrderBook(std::size_t expectedOrders):orderLocations(&pool){
-    orderLocations.reserve(expectedOrders);
-}
+OrderBook::OrderBook(std::size_t expectedOrders):orderLocations(expectedOrders){}
 
 
-void OrderBook::addOrder(const Order& order){
+bool OrderBook::addOrder(const Order& order){
     OrderLocation data = {order.side,order.price};
     if(order.side == Side::BUY){
         auto it = bids.try_emplace(order.price,order.price,&pool);
+        
         data.orderIterator = it.first->second.addOrder(order);
         data.priceLevel = &it.first->second;
-        orderLocations.emplace(order.orderID,data);
+        
+        if(!orderLocations.insert(order.orderID, data)){
+            data.priceLevel->removeOrder(data.orderIterator);
+            if(data.priceLevel->isEmpty()){
+                bids.erase(it.first);
+            }
+            return false;
+        }
+        return true;
 
     }else if(order.side == Side::SELL){
         auto it = asks.try_emplace(order.price,order.price,&pool);
+        
         data.orderIterator = it.first->second.addOrder(order);
         data.priceLevel = &it.first->second;
-        orderLocations.emplace(order.orderID,data);
         
-    }else{
-        std::cerr << "Error: Invalid order side." << std::endl;
+        if(!orderLocations.insert(order.orderID, data)){
+            data.priceLevel->removeOrder(data.orderIterator);
+
+            if(data.priceLevel->isEmpty()){
+                asks.erase(it.first);
+            }
+
+            return false;
+        }
+        return true;
+        
     }
+    return false;
 }
 
 
@@ -127,16 +144,16 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
 
 bool OrderBook::cancelOrder(uint64_t orderID){
 
-    auto orderData = orderLocations.find(orderID);
-    if(orderData == orderLocations.end()){
+    FindResult orderData = orderLocations.find(orderID);
+    if(orderData.location == nullptr){
         return false;
     }
 
-    auto priceLevel = orderData->second.priceLevel;
-    auto price = orderData->second.price;
-    auto side = orderData->second.side;
-    if(priceLevel->removeOrder(orderData->second.orderIterator)){
-        orderLocations.erase(orderData);
+    auto priceLevel = orderData.location->priceLevel;
+    auto price = orderData.location->price;
+    auto side = orderData.location->side;
+    if(priceLevel->removeOrder(orderData.location->orderIterator)){
+        orderLocations.eraseAt(orderData.slotIndex, orderID);
         if(priceLevel->isEmpty()){
             removePriceLevel(price,side);
         }
@@ -147,10 +164,7 @@ bool OrderBook::cancelOrder(uint64_t orderID){
 
 
 bool OrderBook::containsOrder(uint64_t orderID) const{
-    if(orderLocations.find(orderID) != orderLocations.end()){
-        return true;
-    }
-    return false;
+    return orderLocations.contains(orderID);
 }
 
 

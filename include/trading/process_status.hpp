@@ -2,8 +2,6 @@
 #define PROCESS_RESULT_HPP
 
 #include <cstdint>
-#include <vector>
-#include "trade.hpp"
 
 
 enum class ProcessStatus : uint8_t{
@@ -11,12 +9,10 @@ enum class ProcessStatus : uint8_t{
     REJECTED_DUPLICATE_ID,
     REJECTED_ZERO_QUANTITY,
     REJECTED_INVALID_PRICE,
-    REJECTED_QUANTITY_TOO_LARGE
-};
-
-struct ProcessResult{
-    ProcessStatus status;
-    std::vector<Trade> trades;
+    REJECTED_QUANTITY_TOO_LARGE,
+    REJECTED_CAPACITY,
+    PARTIALLY_FILLED_CAPACITY,
+    REJECTED_INVALID_SIDE
 };
 
 

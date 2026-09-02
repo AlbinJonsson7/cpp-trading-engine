@@ -3,9 +3,11 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <vector>
+#include "trade.hpp"
 #include "order_book.hpp"
 #include "order.hpp"
-#include "process_result.hpp"
+#include "process_status.hpp"
 
 
 class MatchingEngine{
@@ -15,7 +17,7 @@ class MatchingEngine{
 
     public:
         MatchingEngine(std::size_t expectedOrders);
-        ProcessResult processOrder(const Order& incomingOrder);
+        ProcessStatus processOrder(const Order& incomingOrder, std::vector<Trade>& tradeBuffer);
         bool cancelOrder(uint64_t orderID);
 
 };

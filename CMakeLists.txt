@@ -14,9 +14,7 @@ add_executable(trading_engine
     src/price_level.cpp
     src/order_book.cpp
     src/matching_engine.cpp
-    src/trading_server.cpp
-    src/protocol.cpp
-    
+    src/order_index.cpp
 )
 
 target_include_directories(trading_engine
@@ -29,6 +27,7 @@ add_executable(matching_engine_benchmark
     src/price_level.cpp
     src/order_book.cpp
     src/matching_engine.cpp
+    src/order_index.cpp
 )
 
 target_include_directories(matching_engine_benchmark
