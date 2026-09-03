@@ -3,11 +3,11 @@
 
 #include <cstdint>
 #include "price_level.hpp"
-#include "order.hpp"
+#include "order_node_pool.hpp"
 
 
 struct OrderLocation{
-    std::pmr::list<Order>::iterator orderIterator;
+    uint32_t nodeIndex = INVALID_NODE_INDEX;
     PriceLevel* priceLevel = nullptr;
 };
 

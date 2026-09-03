@@ -2,19 +2,19 @@
 #include "trading/order_book.hpp"
 
 
-OrderBook::OrderBook(std::size_t expectedOrders):orderLocations(expectedOrders){}
+OrderBook::OrderBook(std::size_t expectedOrders):nodePool(expectedOrders),orderLocations(expectedOrders){}
 
 
 bool OrderBook::addOrder(const Order& order){
     OrderLocation data{};
     if(order.side == Side::BUY){
-        auto it = bids.try_emplace(order.price,order.price,&pool);
+        auto it = bids.try_emplace(order.price,order.price,&nodePool);
         
-        data.orderIterator = it.first->second.addOrder(order);
+        data.nodeIndex = it.first->second.addOrder(order);
         data.priceLevel = &it.first->second;
-        
+
         if(!orderLocations.insert(order.orderID, data)){
-            data.priceLevel->removeOrder(data.orderIterator);
+            data.priceLevel->removeOrder(data.nodeIndex);
             if(data.priceLevel->isEmpty()){
                 bids.erase(it.first);
             }
@@ -23,13 +23,13 @@ bool OrderBook::addOrder(const Order& order){
         return true;
 
     }else if(order.side == Side::SELL){
-        auto it = asks.try_emplace(order.price,order.price,&pool);
+        auto it = asks.try_emplace(order.price,order.price,&nodePool);
         
-        data.orderIterator = it.first->second.addOrder(order);
+        data.nodeIndex = it.first->second.addOrder(order);
         data.priceLevel = &it.first->second;
         
         if(!orderLocations.insert(order.orderID, data)){
-            data.priceLevel->removeOrder(data.orderIterator);
+            data.priceLevel->removeOrder(data.nodeIndex);
 
             if(data.priceLevel->isEmpty()){
                 asks.erase(it.first);
@@ -149,13 +149,15 @@ bool OrderBook::cancelOrder(uint64_t orderID){
         return false;
     }
 
-    auto iterator = orderData->orderIterator;
+    auto nodeIndex = orderData->nodeIndex;
     auto priceLevel = orderData->priceLevel;
 
-    auto price = iterator->price;
-    auto side = iterator->side;
+    auto nodeOrder = &nodePool.get(nodeIndex).order;
 
-    if(priceLevel->removeOrder(iterator)){
+    auto price = nodeOrder->price;
+    auto side = nodeOrder->side;
+
+    if(priceLevel->removeOrder(nodeIndex)){
         orderLocations.erase(orderID);
         if(priceLevel->isEmpty()){
             removePriceLevel(price,side);

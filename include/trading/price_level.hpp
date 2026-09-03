@@ -2,19 +2,21 @@
 #define PRICE_LEVEL_HPP
 
 #include <cstdint>
-#include <list>
-#include <memory_resource>
 #include "order.hpp"
+#include "order_node_pool.hpp"
 
 class PriceLevel {
     private:
         int64_t price;
-        std::pmr::list<Order> orders;
+        uint32_t nodeHeadIndex = INVALID_NODE_INDEX;
+        uint32_t nodeTailIndex = INVALID_NODE_INDEX;
+        OrderNodePool* nodePtr;
+        
     public:
-        PriceLevel(int64_t price,std::pmr::memory_resource* pool);
-        std::pmr::list<Order>::iterator addOrder(const Order& order);
+        PriceLevel(int64_t price, OrderNodePool* nodePtr);
+        uint32_t addOrder(const Order& order);
         void removeFrontOrder();
-        bool removeOrder(std::pmr::list<Order>::iterator orderIterator);
+        bool removeOrder(uint32_t nodeIndex);
         Order& getFrontOrder();
         const Order& getFrontOrder() const;
         bool isEmpty() const;

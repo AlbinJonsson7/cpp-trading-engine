@@ -17,7 +17,9 @@ class OrderIndex{
             std::size_t activeEntries = 0;
         };
         std::vector<std::unique_ptr<Page>> pageDirectory;
-        uint64_t highestOrderID = 0;
+        std::vector<std::unique_ptr<Page>> freePages;
+        uint64_t latestPageIndex = 0;
+        bool hasLatestPage = false;
 
     public:
         OrderIndex(std::size_t expectedOrders);

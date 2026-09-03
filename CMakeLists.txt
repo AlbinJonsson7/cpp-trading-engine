@@ -15,6 +15,7 @@ add_executable(trading_engine
     src/order_book.cpp
     src/matching_engine.cpp
     src/order_index.cpp
+    src/order_node_pool.cpp
 )
 
 target_include_directories(trading_engine
@@ -28,6 +29,7 @@ add_executable(matching_engine_benchmark
     src/order_book.cpp
     src/matching_engine.cpp
     src/order_index.cpp
+    src/order_node_pool.cpp
 )
 
 target_include_directories(matching_engine_benchmark

@@ -6,18 +6,18 @@
 #include <functional>
 #include <cstddef>
 #include <optional>
-#include <memory_resource>
 #include "price_level.hpp"
 #include "order.hpp"
 #include "order_location.hpp"
 #include "order_index.hpp"
+#include "order_node_pool.hpp"
 
 
 
 
 class OrderBook {
     private:
-        std::pmr::unsynchronized_pool_resource pool;
+        OrderNodePool nodePool;
         std::map<int64_t, PriceLevel, std::greater<int64_t>> bids;
         std::map<int64_t, PriceLevel, std::less<int64_t>> asks;
         OrderIndex orderLocations;

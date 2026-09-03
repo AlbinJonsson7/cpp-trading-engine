@@ -12,37 +12,28 @@
 
 using Clock = std::chrono::steady_clock;
 
-
-// =====================================================
-// TEST SETTINGS
-// =====================================================
-
-inline constexpr std::size_t BATCH_SIZE = 100;
-inline constexpr std::size_t NUMBER_OF_BATCHES = 1'000;
-inline constexpr std::size_t NUMBER_OF_RUNS = 10;
-
-inline constexpr std::size_t TOTAL_ORDERS =
-    BATCH_SIZE * NUMBER_OF_BATCHES;
-
-inline constexpr int64_t PRICE = 10'000;
-inline constexpr uint32_t QUANTITY = 1;
+constexpr std::size_t NUMBER_OF_RUNS = 1000;
+constexpr std::size_t BATCH_SIZE = 100;
+constexpr int64_t PRICE = 10'000;
 
 
 // =====================================================
-// CREATE ORDER
+// ORDER HELPER
 // =====================================================
 
-Order makeOrder(
+Order makeLimitOrder(
     uint64_t orderID,
-    Side side)
+    Side side,
+    int64_t price,
+    uint32_t quantity)
 {
     Order order{};
 
     order.orderID = orderID;
     order.side = side;
-    order.price = PRICE;
-    order.originalQuantity = QUANTITY;
-    order.remainingQuantity = QUANTITY;
+    order.price = price;
+    order.originalQuantity = quantity;
+    order.remainingQuantity = quantity;
     order.orderType = OrderType::LIMIT;
 
     return order;
@@ -71,28 +62,128 @@ double median(std::vector<double> values)
 
 
 // =====================================================
-// PERCENTILE
+// CASE A — WARM PAGE
 // =====================================================
 
-double percentile(
-    std::vector<double> values,
-    double p)
+double runWarmPage()
 {
-    std::sort(values.begin(), values.end());
+    MatchingEngine engine(5000);
+    std::vector<Trade> trades;
 
-    if(values.empty()){
-        return 0.0;
-    }
-
-    const double position =
-        p * static_cast<double>(
-            values.size() - 1
+    // Allocates page 0 before timing.
+    Order preload =
+        makeLimitOrder(
+            1,
+            Side::BUY,
+            PRICE,
+            1
         );
 
-    const std::size_t index =
-        static_cast<std::size_t>(position);
+    engine.processOrder(preload, trades);
 
-    return values[index];
+
+    // IDs 1000–1099 all belong to page 0.
+    std::vector<Order> orders;
+    orders.reserve(BATCH_SIZE);
+
+    for(std::size_t i = 0; i < BATCH_SIZE; ++i){
+        orders.push_back(
+            makeLimitOrder(
+                1000 + i,
+                Side::BUY,
+                PRICE,
+                1
+            )
+        );
+    }
+
+
+    const auto start = Clock::now();
+
+    for(const Order& order : orders){
+        engine.processOrder(order, trades);
+    }
+
+    const auto end = Clock::now();
+
+
+    const double seconds =
+        std::chrono::duration<double>(
+            end - start
+        ).count();
+
+    return seconds * 1e9 / BATCH_SIZE;
+}
+
+
+// =====================================================
+// CASE B — CROSS PAGE BOUNDARY
+// =====================================================
+
+double runPageBoundary()
+{
+    MatchingEngine engine(5000);
+    std::vector<Trade> trades;
+
+    /*
+        ID 4000 belongs to page 0.
+
+        This allocates page 0 before timing, just like
+        the warm-page test.
+    */
+    Order preload =
+        makeLimitOrder(
+            4000,
+            Side::BUY,
+            PRICE,
+            1
+        );
+
+    engine.processOrder(preload, trades);
+
+
+    /*
+        IDs 4050–4149.
+
+        Page 0:
+            IDs 1–4096
+
+        Page 1:
+            IDs 4097–8192
+
+        Therefore this timed batch crosses the boundary
+        and forces page 1 to be allocated.
+    */
+    std::vector<Order> orders;
+    orders.reserve(BATCH_SIZE);
+
+    for(std::size_t i = 0; i < BATCH_SIZE; ++i){
+        orders.push_back(
+            makeLimitOrder(
+                4050 + i,
+                Side::BUY,
+                PRICE,
+                1
+            )
+        );
+    }
+
+
+    const auto start = Clock::now();
+
+    for(const Order& order : orders){
+        engine.processOrder(order, trades);
+    }
+
+    const auto end = Clock::now();
+
+
+    const double seconds =
+        std::chrono::duration<double>(
+            end - start
+        ).count();
+
+    return seconds * 1e9 / BATCH_SIZE;
 }
 
 
@@ -104,243 +195,62 @@ int main()
 {
     std::cout << std::fixed << std::setprecision(3);
 
+    std::vector<double> warmResults;
+    std::vector<double> boundaryResults;
+
+    warmResults.reserve(NUMBER_OF_RUNS);
+    boundaryResults.reserve(NUMBER_OF_RUNS);
+
+
     std::cout << "========================================\n";
-    std::cout << "TEST 12: BATCH LATENCY - MATCH 1-to-1\n";
+    std::cout << "TARGETED ADD PAGE-BOUNDARY BENCHMARK\n";
     std::cout << "========================================\n";
-
-    std::cout
-        << "Batch size: "
-        << BATCH_SIZE
-        << "\n";
-
-    std::cout
-        << "Batches per run: "
-        << NUMBER_OF_BATCHES
-        << "\n";
-
-    std::cout
-        << "Incoming orders per run: "
-        << TOTAL_ORDERS
-        << "\n";
-
-    std::cout
-        << "Resting orders per run: "
-        << TOTAL_ORDERS
-        << "\n";
-
-    std::cout
-        << "Measured runs: "
-        << NUMBER_OF_RUNS
-        << "\n\n";
+    std::cout << "Batch size: " << BATCH_SIZE << '\n';
+    std::cout << "Measured runs: " << NUMBER_OF_RUNS << "\n\n";
 
 
-    // =================================================
-    // GENERATE RESTING SELL ORDERS
-    // =================================================
+    for(std::size_t run = 0; run < NUMBER_OF_RUNS; ++run){
 
-    std::vector<Order> restingOrders;
-    restingOrders.reserve(TOTAL_ORDERS);
+        warmResults.push_back(
+            runWarmPage()
+        );
 
-    for(std::size_t i = 0;
-        i < TOTAL_ORDERS;
-        ++i)
-    {
-        restingOrders.push_back(
-            makeOrder(
-                static_cast<uint64_t>(i + 1),
-                Side::SELL
-            )
+        boundaryResults.push_back(
+            runPageBoundary()
         );
     }
 
 
-    // =================================================
-    // GENERATE INCOMING BUY ORDERS
-    // =================================================
+    const double warmMedian =
+        median(warmResults);
 
-    std::vector<Order> incomingOrders;
-    incomingOrders.reserve(TOTAL_ORDERS);
-
-    for(std::size_t i = 0;
-        i < TOTAL_ORDERS;
-        ++i)
-    {
-        incomingOrders.push_back(
-            makeOrder(
-                static_cast<uint64_t>(
-                    1'000'000 + i
-                ),
-                Side::BUY
-            )
-        );
-    }
+    const double boundaryMedian =
+        median(boundaryResults);
 
 
-    // =================================================
-    // STORE EACH RUN'S PERCENTILES
-    // =================================================
-
-    std::vector<double> runP50s;
-    std::vector<double> runP95s;
-    std::vector<double> runP99s;
-
-    runP50s.reserve(NUMBER_OF_RUNS);
-    runP95s.reserve(NUMBER_OF_RUNS);
-    runP99s.reserve(NUMBER_OF_RUNS);
-
-
-    // =================================================
-    // 10 INDEPENDENT RUNS
-    // =================================================
-
-    for(std::size_t run = 0;
-        run < NUMBER_OF_RUNS;
-        ++run)
-    {
-        MatchingEngine engine(TOTAL_ORDERS);
-
-        /*
-            One reusable V2 trade buffer for the entire
-            MatchingEngine run.
-        */
-        std::vector<Trade> tradeBuffer;
-
-
-        // =============================================
-        // PRELOAD RESTING ORDERS - NOT TIMED
-        // =============================================
-
-        for(const Order& order : restingOrders){
-            engine.processOrder(
-                order,
-                tradeBuffer
-            );
-        }
-
-
-        /*
-            Each element stores the average matching
-            latency per order inside one batch of
-            100 incoming orders.
-        */
-        std::vector<double> batchLatencies;
-        batchLatencies.reserve(NUMBER_OF_BATCHES);
-
-
-        // =============================================
-        // MEASURE 1,000 MATCHING BATCHES
-        // =============================================
-
-        for(std::size_t batch = 0;
-            batch < NUMBER_OF_BATCHES;
-            ++batch)
-        {
-            const std::size_t startIndex =
-                batch * BATCH_SIZE;
-
-
-            const auto start = Clock::now();
-
-
-            for(std::size_t i = 0;
-                i < BATCH_SIZE;
-                ++i)
-            {
-                engine.processOrder(
-                    incomingOrders[startIndex + i],
-                    tradeBuffer
-                );
-            }
-
-
-            const auto end = Clock::now();
-
-
-            const double batchNanoseconds =
-                std::chrono::duration<double, std::nano>(
-                    end - start
-                ).count();
-
-
-            /*
-                Convert the time for the entire
-                100-order batch into average
-                nanoseconds per incoming order.
-            */
-            const double nsPerIncoming =
-                batchNanoseconds /
-                static_cast<double>(BATCH_SIZE);
-
-
-            batchLatencies.push_back(
-                nsPerIncoming
-            );
-        }
-
-
-        // =============================================
-        // PERCENTILES FOR THIS RUN
-        // =============================================
-
-        const double p50 =
-            percentile(batchLatencies, 0.50);
-
-        const double p95 =
-            percentile(batchLatencies, 0.95);
-
-        const double p99 =
-            percentile(batchLatencies, 0.99);
-
-
-        runP50s.push_back(p50);
-        runP95s.push_back(p95);
-        runP99s.push_back(p99);
-
-
-        std::cout
-            << "Run " << run + 1
-            << ": "
-            << "p50 = " << p50 << " ns/order"
-            << " | "
-            << "p95 = " << p95 << " ns/order"
-            << " | "
-            << "p99 = " << p99 << " ns/order"
-            << "\n";
-    }
-
-
-    // =================================================
-    // FINAL RESULTS
-    // =================================================
-
-    const double finalP50 =
-        median(runP50s);
-
-    const double finalP95 =
-        median(runP95s);
-
-    const double finalP99 =
-        median(runP99s);
-
-
-    std::cout << "\n========================================\n";
+    std::cout << "========================================\n";
     std::cout << "FINAL RESULT\n";
     std::cout << "========================================\n";
 
     std::cout
-        << "Median p50: "
-        << finalP50
-        << " ns/order\n";
+        << "Warm page median: "
+        << warmMedian
+        << " ns/add\n";
 
     std::cout
-        << "Median p95: "
-        << finalP95
-        << " ns/order\n";
+        << "Boundary median: "
+        << boundaryMedian
+        << " ns/add\n";
 
     std::cout
-        << "Median p99: "
-        << finalP99
-        << " ns/order\n";
+        << "Boundary overhead: "
+        << boundaryMedian - warmMedian
+        << " ns/add\n";
+
+    std::cout
+        << "Boundary / Warm: "
+        << boundaryMedian / warmMedian
+        << "x\n";
 
 
     return 0;
