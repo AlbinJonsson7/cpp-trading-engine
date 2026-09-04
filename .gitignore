@@ -1,4 +1,15 @@
+# Build output
 build/
+
+# IDE / editor files
 .vscode/
 .vs/
+.idea/
+
+# CMake user-specific configuration
 CMakeSettings.json
+CMakeUserPresets.json
+
+# Windows-generated files
+Thumbs.db
+Desktop.ini

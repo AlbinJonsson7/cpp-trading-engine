@@ -10,7 +10,7 @@ OrderIndex::OrderIndex(std::size_t expectedOrders){
     }
     pageDirectory.reserve(reservedEntries);
     freePages.reserve(reservedEntries);
-    auto count = 0;
+    std::size_t count = 0;
     while(count < reservedEntries){
         freePages.push_back(std::make_unique<Page>());
         count++;

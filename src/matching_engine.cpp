@@ -1,4 +1,3 @@
-#include <iostream>
 #include <algorithm>
 #include "trading/trade.hpp"
 #include "trading/matching_engine.hpp"

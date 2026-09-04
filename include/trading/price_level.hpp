@@ -5,12 +5,13 @@
 #include "order.hpp"
 #include "order_node_pool.hpp"
 
+
 class PriceLevel {
     private:
         int64_t price;
         uint32_t nodeHeadIndex = INVALID_NODE_INDEX;
         uint32_t nodeTailIndex = INVALID_NODE_INDEX;
-        OrderNodePool* nodePtr;
+        OrderNodePool* nodePtr = nullptr;
         
     public:
         PriceLevel(int64_t price, OrderNodePool* nodePtr);
@@ -21,6 +22,7 @@ class PriceLevel {
         const Order& getFrontOrder() const;
         bool isEmpty() const;
         int64_t getPrice() const;
+
 };
 
 #endif // PRICE_LEVEL_HPP

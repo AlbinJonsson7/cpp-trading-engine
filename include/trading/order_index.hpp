@@ -11,7 +11,7 @@
 
 class OrderIndex{
     private:
-        static constexpr uint32_t PAGE_SIZE = 4096;  
+        static constexpr uint32_t PAGE_SIZE = 4'096;  
         struct Page{
             std::array<OrderLocation,PAGE_SIZE> locations;
             std::size_t activeEntries = 0;
@@ -22,12 +22,13 @@ class OrderIndex{
         bool hasLatestPage = false;
 
     public:
-        OrderIndex(std::size_t expectedOrders);
+        explicit OrderIndex(std::size_t expectedOrders);
         bool insert(uint64_t orderID, OrderLocation location);
         OrderLocation* find(uint64_t orderID);
         const OrderLocation* find(uint64_t orderID) const;
         bool erase(uint64_t orderID);
         bool contains(uint64_t orderID) const;
+
 };
 
 

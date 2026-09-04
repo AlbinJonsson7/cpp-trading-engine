@@ -3,7 +3,6 @@
 #include "trading/order_node_pool.hpp"
 
 
-
 OrderNodePool::OrderNodePool(std::size_t expectedOrders){
     orders.reserve(expectedOrders);
     links.reserve(expectedOrders);
@@ -27,7 +26,7 @@ uint32_t OrderNodePool::acquire(const Order& order){
     OrderLinks link;
 
     orders.push_back(order);
-    index = orders.size() - 1;
+    index = static_cast<uint32_t>(orders.size() - 1);
     link.active = true;
     links.push_back(link);
 
@@ -40,7 +39,7 @@ bool OrderNodePool::release(uint32_t nodeIndex){
     assert(links.size() == orders.size());
     if(nodeIndex >= (orders.size())){
         return false;
-    }else if(links[nodeIndex].active == false){
+    }else if(!links[nodeIndex].active){
         return false;
     }
 
@@ -58,8 +57,7 @@ Order& OrderNodePool::getOrder(uint32_t nodeIndex){
     assert(nodeIndex < orders.size());
     assert(links[nodeIndex].active == true);
     
-    Order& order = orders[nodeIndex];
-    return order;
+    return orders[nodeIndex];
 }
 
 
@@ -68,8 +66,7 @@ OrderLinks& OrderNodePool::getLinks(uint32_t nodeIndex){
     assert(nodeIndex < orders.size());
     assert(links[nodeIndex].active == true);
     
-    OrderLinks& link = links[nodeIndex];
-    return link;
+    return links[nodeIndex];
 }
 
 
@@ -78,8 +75,7 @@ const Order& OrderNodePool::getOrder(uint32_t nodeIndex) const{
     assert(nodeIndex < orders.size());
     assert(links[nodeIndex].active == true);
     
-    const Order& order = orders[nodeIndex];
-    return order;
+    return orders[nodeIndex];
 }
 
 
@@ -88,8 +84,5 @@ const OrderLinks& OrderNodePool::getLinks(uint32_t nodeIndex) const{
     assert(nodeIndex < orders.size());
     assert(links[nodeIndex].active == true);
     
-    const OrderLinks& link = links[nodeIndex];
-    return link;
+    return links[nodeIndex];
 }
-
-

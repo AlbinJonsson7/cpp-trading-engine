@@ -1,4 +1,3 @@
-#include <iostream>
 #include "trading/order_book.hpp"
 
 
@@ -111,8 +110,10 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
         }
         auto it = asks.begin();
         Order& order = it->second.getFrontOrder();
-        if(quantity > order.remainingQuantity)return false;
-        order.remainingQuantity = order.remainingQuantity - quantity;
+        if(quantity > order.remainingQuantity){
+            return false;
+        }
+        order.remainingQuantity -= quantity;
         if(order.remainingQuantity == 0){
             orderLocations.erase(order.orderID); 
             it->second.removeFrontOrder(); 
@@ -127,8 +128,10 @@ bool OrderBook::fillBestOrder(Side side, uint32_t quantity){
         }
         auto it = bids.begin();
         Order& order = it->second.getFrontOrder();
-        if(quantity > order.remainingQuantity) return false;
-        order.remainingQuantity = order.remainingQuantity - quantity;
+        if(quantity > order.remainingQuantity){ 
+            return false;
+        }
+        order.remainingQuantity -= quantity;
         if(order.remainingQuantity == 0){
             orderLocations.erase(order.orderID); 
             it->second.removeFrontOrder(); 

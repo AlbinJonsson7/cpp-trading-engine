@@ -1,5 +1,5 @@
-#ifndef PROCESS_RESULT_HPP
-#define PROCESS_RESULT_HPP
+#ifndef PROCESS_STATUS_HPP
+#define PROCESS_STATUS_HPP
 
 #include <cstdint>
 
@@ -15,5 +15,4 @@ enum class ProcessStatus : uint8_t{
     REJECTED_INVALID_SIDE
 };
 
-
-#endif // PROCESS_RESULT_HPP
+#endif // PROCESS_STATUS_HPP

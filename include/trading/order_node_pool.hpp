@@ -8,7 +8,7 @@
 #include "order.hpp"
 
 
-constexpr uint32_t INVALID_NODE_INDEX = std::numeric_limits<uint32_t>::max();
+inline constexpr uint32_t INVALID_NODE_INDEX = std::numeric_limits<uint32_t>::max();
 
 struct OrderLinks{
     uint32_t previous = INVALID_NODE_INDEX;
@@ -22,14 +22,16 @@ class OrderNodePool{
         std::vector<Order> orders;
         std::vector<OrderLinks> links;
         std::vector<uint32_t> freeIndices;
+
     public:
-        OrderNodePool(std::size_t expectedOrders);
+        explicit OrderNodePool(std::size_t expectedOrders);
         uint32_t acquire(const Order& order);
         bool release(uint32_t nodeIndex);
         Order& getOrder(uint32_t nodeIndex);
         OrderLinks& getLinks(uint32_t nodeIndex);
         const Order& getOrder(uint32_t nodeIndex) const;
         const OrderLinks& getLinks(uint32_t nodeIndex) const;
+
 };
 
 #endif // ORDER_NODE_POOL_HPP

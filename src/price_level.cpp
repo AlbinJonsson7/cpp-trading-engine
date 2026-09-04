@@ -33,27 +33,25 @@ void PriceLevel::removeFrontOrder(){
         return;
     }
 
-    auto headNode = &nodePtr->getLinks(nodeHeadIndex);
+    auto& headLinks = nodePtr->getLinks(nodeHeadIndex);
     auto oldHeadIndex = nodeHeadIndex;
     
-    if(headNode->next == INVALID_NODE_INDEX){
+    if(headLinks.next == INVALID_NODE_INDEX){
         nodeHeadIndex = INVALID_NODE_INDEX;
         nodeTailIndex = INVALID_NODE_INDEX;
     }else{
-        nodeHeadIndex = headNode->next;
+        nodeHeadIndex = headLinks.next;
         nodePtr->getLinks(nodeHeadIndex).previous = INVALID_NODE_INDEX;
     }
 
     nodePtr->release(oldHeadIndex);
-
-    return;
 }
 
 
 bool PriceLevel::removeOrder(uint32_t nodeIndex){
-    auto link = &nodePtr->getLinks(nodeIndex);
-    auto oldNextIndex = link->next;
-    auto oldPrevIndex = link->previous;
+    auto& link = nodePtr->getLinks(nodeIndex);
+    auto oldNextIndex = link.next;
+    auto oldPrevIndex = link.previous;
 
     if(oldPrevIndex != INVALID_NODE_INDEX){
         nodePtr->getLinks(oldPrevIndex).next = oldNextIndex;
@@ -73,16 +71,14 @@ bool PriceLevel::removeOrder(uint32_t nodeIndex){
 
 Order& PriceLevel::getFrontOrder(){
     assert(nodeHeadIndex != INVALID_NODE_INDEX);
-    Order& frontOrder = nodePtr->getOrder(nodeHeadIndex);
 
-    return frontOrder;
+    return nodePtr->getOrder(nodeHeadIndex);
 }
 
 const Order& PriceLevel::getFrontOrder() const {
     assert(nodeHeadIndex != INVALID_NODE_INDEX);
-    const Order& frontOrder = nodePtr->getOrder(nodeHeadIndex);
 
-    return frontOrder;
+    return nodePtr->getOrder(nodeHeadIndex);
 }
 
 

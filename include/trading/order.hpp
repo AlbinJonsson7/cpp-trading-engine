@@ -17,10 +17,10 @@ enum class OrderType : uint8_t{
 
 struct Order{
     uint64_t orderID;
-    Side side;
     int64_t price;
     uint32_t originalQuantity;
     uint32_t remainingQuantity;
+    Side side;
     OrderType orderType = OrderType::LIMIT; //Limit order is default
 };
 

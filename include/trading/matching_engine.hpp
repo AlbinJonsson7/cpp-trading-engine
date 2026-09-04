@@ -13,11 +13,11 @@
 class MatchingEngine{
     private:
         OrderBook orderBook;
-        static constexpr uint32_t MAX_ORDER_QUANTITY = 1000000;
+        static constexpr uint32_t MAX_ORDER_QUANTITY = 1'000'000;
         uint64_t highestOrderID = 0;
 
     public:
-        MatchingEngine(std::size_t expectedOrders);
+        explicit MatchingEngine(std::size_t expectedOrders);
         ProcessStatus processOrder(const Order& incomingOrder, std::vector<Trade>& tradeBuffer);
         bool cancelOrder(uint64_t orderID);
 

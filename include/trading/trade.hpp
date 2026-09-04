@@ -11,15 +11,4 @@ struct Trade{
     uint32_t quantity;
 };
 
-
-/*
-Trade
-    buyOrderID  → uint64_t
-    sellOrderID → uint64_t
-    price       → int64_t
-    quantity    → uint32_t
-
-*/
-
-
 #endif // TRADE_HPP

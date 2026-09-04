@@ -8,11 +8,8 @@
 #include <optional>
 #include "price_level.hpp"
 #include "order.hpp"
-#include "order_location.hpp"
 #include "order_index.hpp"
 #include "order_node_pool.hpp"
-
-
 
 
 class OrderBook {
@@ -21,10 +18,10 @@ class OrderBook {
         std::map<int64_t, PriceLevel, std::greater<int64_t>> bids;
         std::map<int64_t, PriceLevel, std::less<int64_t>> asks;
         OrderIndex orderLocations;
+        bool removePriceLevel(int64_t price, Side side);
         
-
     public:
-        OrderBook(std::size_t expectedOrders);
+        explicit OrderBook(std::size_t expectedOrders);
         bool addOrder(const Order& order);
         std::optional<int64_t> getBestBid() const;
         std::optional<int64_t> getBestAsk() const;
@@ -32,13 +29,10 @@ class OrderBook {
         const Order* getBestAskOrder() const;
         bool hasBids() const;
         bool hasAsks() const;
-        bool removePriceLevel(int64_t price, Side side);
         bool fillBestOrder(Side side, uint32_t quantity);
         bool cancelOrder(uint64_t orderID);
         bool containsOrder(uint64_t orderID) const;
+
 };
-
-
-
 
 #endif // ORDER_BOOK_HPP
