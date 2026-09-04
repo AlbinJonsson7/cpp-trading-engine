@@ -5,7 +5,8 @@
 
 
 OrderNodePool::OrderNodePool(std::size_t expectedOrders){
-    nodes.reserve(expectedOrders);
+    orders.reserve(expectedOrders);
+    links.reserve(expectedOrders);
     freeIndices.reserve(expectedOrders);
 }
 
@@ -16,53 +17,79 @@ uint32_t OrderNodePool::acquire(const Order& order){
     if(!freeIndices.empty()){
         index = freeIndices.back();
         freeIndices.pop_back();
-        nodes[index].order = order;
-        nodes[index].next = INVALID_NODE_INDEX;
-        nodes[index].previous = INVALID_NODE_INDEX;
-        nodes[index].active = true;
+        orders[index] = order;
+        links[index].next = INVALID_NODE_INDEX;
+        links[index].previous = INVALID_NODE_INDEX;
+        links[index].active = true;
         return index;
     }
 
-    OrderNode node;
+    OrderLinks link;
 
-    node.active = true;
-    node.order = order;
-    nodes.push_back(node);
-    index = nodes.size() - 1;
+    orders.push_back(order);
+    index = orders.size() - 1;
+    link.active = true;
+    links.push_back(link);
+
 
     return index;
 }
 
 
 bool OrderNodePool::release(uint32_t nodeIndex){
-    if(nodeIndex >= (nodes.size())){
+    assert(links.size() == orders.size());
+    if(nodeIndex >= (orders.size())){
         return false;
-    }else if(nodes[nodeIndex].active == false){
+    }else if(links[nodeIndex].active == false){
         return false;
     }
 
-    nodes[nodeIndex].previous = INVALID_NODE_INDEX;
-    nodes[nodeIndex].next = INVALID_NODE_INDEX;
-    nodes[nodeIndex].active = false;
+    links[nodeIndex].previous = INVALID_NODE_INDEX;
+    links[nodeIndex].next = INVALID_NODE_INDEX;
+    links[nodeIndex].active = false;
     freeIndices.push_back(nodeIndex);
 
     return true;
 }
 
 
-OrderNode& OrderNodePool::get(uint32_t nodeIndex){
-    assert(nodeIndex < nodes.size());
-    assert(nodes[nodeIndex].active == true);
-    OrderNode& node = nodes[nodeIndex];
-    return node;
+Order& OrderNodePool::getOrder(uint32_t nodeIndex){
+    assert(links.size() == orders.size());
+    assert(nodeIndex < orders.size());
+    assert(links[nodeIndex].active == true);
+    
+    Order& order = orders[nodeIndex];
+    return order;
 }
 
 
-const OrderNode& OrderNodePool::get(uint32_t nodeIndex) const{
-    assert(nodeIndex < nodes.size());
-    assert(nodes[nodeIndex].active == true);
-    const OrderNode& node = nodes[nodeIndex];
-    return node;
+OrderLinks& OrderNodePool::getLinks(uint32_t nodeIndex){
+    assert(links.size() == orders.size());
+    assert(nodeIndex < orders.size());
+    assert(links[nodeIndex].active == true);
+    
+    OrderLinks& link = links[nodeIndex];
+    return link;
+}
+
+
+const Order& OrderNodePool::getOrder(uint32_t nodeIndex) const{
+    assert(links.size() == orders.size());
+    assert(nodeIndex < orders.size());
+    assert(links[nodeIndex].active == true);
+    
+    const Order& order = orders[nodeIndex];
+    return order;
+}
+
+
+const OrderLinks& OrderNodePool::getLinks(uint32_t nodeIndex) const{
+    assert(links.size() == orders.size());
+    assert(nodeIndex < orders.size());
+    assert(links[nodeIndex].active == true);
+    
+    const OrderLinks& link = links[nodeIndex];
+    return link;
 }
 
 

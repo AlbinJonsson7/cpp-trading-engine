@@ -152,7 +152,7 @@ bool OrderBook::cancelOrder(uint64_t orderID){
     auto nodeIndex = orderData->nodeIndex;
     auto priceLevel = orderData->priceLevel;
 
-    auto nodeOrder = &nodePool.get(nodeIndex).order;
+    auto nodeOrder = &nodePool.getOrder(nodeIndex);
 
     auto price = nodeOrder->price;
     auto side = nodeOrder->side;
